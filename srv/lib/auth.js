@@ -66,8 +66,12 @@ exports.getUser = async function(twitchOAuth) {
         return null
     }
 
-    let user = result.data[0]
-    return user
+    if (result.data != null) {
+        let user = result.data[0]
+        return user
+    }
+
+    return null
 }
 
 exports.userIsAdmin = function(user) {

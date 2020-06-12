@@ -22,7 +22,7 @@
                         <a @click.prevent="changeNav('edit')" class="nav-link" :class="{'active': navTab == 'edit'}" href="#edit">Match Details</a>
                     </li>
                     <li class="nav-item">
-                        <a @click.prevent="changeNav('entries')" class="nav-link" :class="{'active': navTab == 'entries'}" href="#entries">Participants <span v-if="allEntries.length > 0">({{allEntries.length}})</span></a>
+                        <a @click.prevent="changeNav('entries')" class="nav-link" :class="{'active': navTab == 'entries'}" href="#entries">Participants <span v-if="eligibleEntries.length > 0 || winningEntries.length > 0">({{eligibleEntries.length + winningEntries.length}})</span></a>
                     </li>
                     <li class="nav-item">
                         <a @click.prevent="changeNav('delete')" class="nav-link" :class="{'active': navTab == 'delete'}" href="#delete">Delete</a>
@@ -105,7 +105,7 @@
                 <!-- entries -->
                 <template v-if="navTab == 'entries'">
                     <h3 class="mt-4">Choose some winners</h3>
-                    <p>Click the number of winners to choose.</p>
+                    <p>Click the number of winners to choose for round {{ currentLotteryRound }}.</p>
 
                     <div class="choices" :class="{'choices-disabled': choosing}">
                     <template v-for="number in 10">
@@ -117,47 +117,48 @@
                     </template>
                     </div>
 
+                    <div v-if="winnerCount != null" class="text-center mt-3">
+                        <span class="text-muted">Winners chosen in this round will be excluded from the next round of winners.</span>
+                    </div>
+                    <div v-if="winnerCount != null && !hasMatchDetails" class="text-center mt-3">
+                        <span class="text-danger">Please enter some match details before choosing winners.</span>
+                    </div>
+
                     <div class="text-center mt-3">
-                        <a @click.prevent="submitChooseWinners()" href="#choose-winners" class="btn btn-primary" :class="{disabled: winnerCount == null || choosing}">Choose Winners</a>
+                        <a @click.prevent="submitChooseWinners()" href="#choose-winners" class="btn btn-primary" :class="{disabled: winnerCount == null || !hasMatchDetails || choosing}">Choose Winners</a>
                         <a @click.prevent="winnerCount = null" href="#cancel-winners" class="btn btn-secondary ml-3" :class="{disabled: winnerCount == null || choosing}">Cancel</a>
                     </div>
 
                     <hr class="my-4">
                     <h3 class="mt-4">Entrants</h3>
-                    <template v-if="allEntries.length > 0">
+                    <template v-if="eligibleEntries.length > 0">
                     <div class="entries">
-                        <template v-for="entry of allEntries">
+                        <template v-for="entry of eligibleEntries">
                             <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
                         </template>
                     </div>
-                    <div class="mt-3 text-muted">{{allEntries.length}} people are in the lottery.</div>
+                    <div class="mt-3 text-muted">{{eligibleEntries.length}} people are in the lottery.</div>
                     </template>
-                    <template v-if="allEntries.length == 0">
+                    <template v-if="eligibleEntries.length == 0">
                         <div class="text-muted">Nobody has entered yet.</div>
                     </template>
 
 
+                    <template v-if="currentLotteryRound > 1">
                     <hr class="my-4">
-                    <h3 class="mt-4">Winners</h3>
-                    <template v-if="chosenEntries.length > 0">
-                    <div class="winners">
-                        <template v-for="entry of chosenEntries">
+                    <h3 class="mt-4">Round {{ currentLotteryRound - 1 }} Winners</h3>
+                    <template v-if="winningEntries.length > 0">
+                    <div class="entries">
+                        <template v-for="entry of winningEntries">
                             <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
                         </template>
                     </div>
-                    <div class="mt-3 text-muted">{{chosenEntries.length}} people are winners.</div>
-<!--                     <div v-if="chooseComplete" class="alert alert-warning fade show mt-4" role="alert">
-                        Winners Chosen
-                        <button @click="chooseComplete = false" type="button" class="close" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
- -->
-                     </template>
-                    <template v-if="chosenEntries.length == 0">
-                        <div class="text-muted">Nobody has won yet.</div>
+                    <div class="mt-3 text-muted">{{winningEntries.length}} people were winners round {{ currentLotteryRound - 1 }}.</div>
                     </template>
-
+                    <template v-if="winningEntries.length == 0">
+                        <div class="text-muted">No winners for {{ currentLotteryRound - 1 }}.</div>
+                    </template>
+                    </template>
 
                 </template>
 
@@ -268,9 +269,7 @@ export default {
     data() {
         return {
             lottery: {},
-            unchosenEntries: [],
-            chosenEntries: [],
-            allEntries: [],
+            rawEntries: [],
             activeLottery: {},
 
             showPassword: false,
@@ -337,7 +336,7 @@ export default {
                 this.lottery = response.data.model
 
                 // filter entries
-                this.updateLotteryEntries(response.data.entries)
+                this.rawEntries = response.data.entries
 
                 // set the active lottery object
                 this.activeLottery = JSON.parse(JSON.stringify(response.data.model))
@@ -352,27 +351,10 @@ export default {
             // console.log('loadLottery response', JSON.stringify(response, null, 2))
 
             if (response.success) {
-                this.updateLotteryEntries(response.data.entries)
+                this.rawEntries = response.data.entries
             }
 
             this.loading = false
-        },
-        updateLotteryEntries(entries) {
-            // filter entries
-            let allEntries = []
-            let unchosenEntries = []
-            let chosenEntries = []
-            for (let entry of entries) {
-                if (entry.chosenRound == null) {
-                    unchosenEntries.push(entry)
-                } else {
-                    chosenEntries.push(entry)
-                }
-                allEntries.push(entry)
-            }
-            this.unchosenEntries = unchosenEntries
-            this.chosenEntries = chosenEntries
-            this.allEntries = allEntries
         },
         async executeDelete() {
             this.deleting = true
@@ -466,6 +448,62 @@ export default {
             // reload the lottery...
             this.loadLottery(this.lottery._id)
         },
+    },
+
+    computed: {
+        hasMatchDetails() {
+            if (this.lottery.comments != null && this.lottery.comments.length > 0) {
+                return true
+            }
+            if (this.lottery.matchName != null && this.lottery.matchName.length > 0) {
+                return true
+            }
+            if (this.lottery.matchPassword != null && this.lottery.matchPassword.length > 0) {
+                return true
+            }
+
+            return false
+        },
+
+        currentLotteryRound() {
+            return this.lottery.currentRound || 1
+        },
+        winningEntries() {
+            return this.entriesByType.winningEntries
+        },
+        eligibleEntries() {
+            return this.entriesByType.eligibleEntries
+        },
+        allEntries() {
+            return this.entriesByType.allEntries
+        },
+
+        entriesByType() {
+            // filter entries
+            let allEntries = []
+            let eligibleEntries = []
+            let winningEntries = []
+
+            for (let entry of this.rawEntries) {
+                if (entry.chosenRound == this.currentLotteryRound - 1) {
+                    winningEntries.push(entry)
+                    allEntries.push(entry)
+                } else {
+                    if (entry.active == true) {
+                        eligibleEntries.push(entry)
+                        allEntries.push(entry)
+                    }
+                }
+            }
+
+            return {
+                eligibleEntries:  eligibleEntries,
+                winningEntries:  winningEntries,
+                allEntries:  allEntries,
+            }
+        },
+
+
     },
 }
 </script>

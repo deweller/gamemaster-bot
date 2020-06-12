@@ -348,6 +348,7 @@ export default (app, http) => {
         filteredEntries.push({
           username: entry.username,
           chosenRound: entry.chosenRound || null,
+          active: entry.active,
         })
       }
       return filteredEntries
@@ -367,24 +368,25 @@ export default (app, http) => {
       }
 
       // choose winners for a lottery
+      const roundNumber = lottery.currentRound || 1
 
-      // get all entries
-      const allEntries = await datastore.getLotteryEntries(lottery._id)
+      // get all active entries
+      const allActiveEntries = await datastore.getActiveLotteryEntries(lottery._id)
       let unChosenIds = []
       let usersByEntryId = {}
-      for (let entry of allEntries) {
-        if (entry.chosenRound == null) {
+      for (let entry of allActiveEntries) {
+        if (entry.chosenRound == null || entry.chosenRound != roundNumber - 1) {
           unChosenIds.push(entry._id)
           usersByEntryId[entry._id] = {
             username: entry.username,
             userId: entry.userId,
+            active: entry.active,
           }
         }
       }
 
       // choose winners
       const winnerCount = postedData.winnerCount
-      const roundNumber = 1
 
       if (winnerCount > unChosenIds.length) {
         res.status(422).json({
@@ -401,8 +403,8 @@ export default (app, http) => {
         chosenRound: roundNumber,
       })
 
-      // mark the lottery as having some winners
-      datastore.updateLottery(lottery._id, {chosenRound: roundNumber})
+      // update the lottery with the next round
+      datastore.updateLottery(lottery._id, {currentRound: roundNumber + 1})
 
       eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
 
@@ -455,7 +457,7 @@ export default (app, http) => {
           return
         }
 
-        let result = await datastore.addLotteryEntry(lottery._id, username)
+        let result = await datastore.activateLotteryEntry(lottery._id, username)
         eventEmitter.emit('entryUpdated', { lotteryId: lottery._id, username: username })
 
         res.json({})

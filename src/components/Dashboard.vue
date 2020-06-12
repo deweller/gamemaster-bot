@@ -6,8 +6,8 @@
 
         <ErrorComponent v-if="!loading" :error="apiErrorMessage"></ErrorComponent>
 
-        <div>
-            There is nothing to see on this page at this time.
+        <div class="mt-5 text-center">
+            There is nothing to see here.
             <!-- user view is disabled.  Use Discord instead. -->
         </div>
 
@@ -124,7 +124,7 @@
 <script>
 
 import ErrorComponent from './ErrorComponent.vue'
-import * as api from '../lib/api'
+// import * as api from '../lib/api'
 import moment from 'moment'
 
 export default {

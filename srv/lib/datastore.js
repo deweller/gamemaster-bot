@@ -174,7 +174,14 @@ let entriesDb = new Datastore({
 entriesDb.ensureIndex({ fieldName: 'entryKey', unique: true }, function (err) {
 });
 
-exports.addLotteryEntry = async function (lotteryId, userId, username) {
+exports.activateLotteryEntry = async function (lotteryId, userId, username) {
+    return await exports.upsertLotteryEntry(lotteryId, userId, username, true)
+}
+exports.deActivateLotteryEntry = async function (lotteryId, userId, username) {
+    return await exports.upsertLotteryEntry(lotteryId, userId, username, false)
+}
+
+exports.upsertLotteryEntry = async function (lotteryId, userId, username, active) {
 
     const entryKey = `${lotteryId}:${username}`
     const entryDoc = {
@@ -182,6 +189,7 @@ exports.addLotteryEntry = async function (lotteryId, userId, username) {
         lotteryId,
         userId,
         username,
+        active,
     }
 
     return new Promise((resolve, reject) => {
@@ -191,9 +199,10 @@ exports.addLotteryEntry = async function (lotteryId, userId, username) {
                 return
             }
 
+            logger.debug('[upsertLotteryEntry] wasInserted: '+JSON.stringify(wasInserted,null,2))
             resolve({
                 ...entryDoc,
-                wasAdded: wasInserted,
+                wasAdded: !!wasInserted,
             })
         })
     })
@@ -232,6 +241,20 @@ exports.getLotteryEntries = async function (lotteryId) {
     return new Promise((resolve, reject) => {
         // Find all documents in the collection
         entriesDb.find({ lotteryId: lotteryId }).sort({ username: 1 }).exec(function (err, docs) {
+            if (err) {
+              reject(err)
+              return
+            }
+
+            resolve(docs)
+        })
+    })
+}
+
+exports.getActiveLotteryEntries = async function (lotteryId) {
+    return new Promise((resolve, reject) => {
+        // Find all documents in the collection
+        entriesDb.find({ lotteryId: lotteryId, active: true }).sort({ username: 1 }).exec(function (err, docs) {
             if (err) {
               reject(err)
               return

@@ -4,7 +4,6 @@ const logger = require('../../lib/logger')
 
 let client
 let commands = {}
-let adminCommands = {}
 let config
 
 const REACT_EMOJI = '✅'
@@ -25,7 +24,7 @@ exports.init = async function(newClient, newConfig) {
     await cleanupAndAttachMessages()
 
     // greet
-    let message = await config.mainChannel.send("The lottery bot has joined")
+    let message = await config.mainChannel.send("I have joined the chat")
     message.delete({timeout: 5000})
 
 
@@ -66,15 +65,17 @@ function listenForEvents() {
             userTags = userTags + `<@${userEntry.userId}>`
             first = false
         }
-        logger.debug(`[winnersChosen] ${config.mainChannelName}: ${lotteryName} ${userTags}`)
+        logger.debug(`[winnersChosen] ${lotteryName} ${userTags}`)
 
-        let message = await config.mainChannel.send(`Winners were chosen for ${lotteryName}. ${userTags}, please check your direct messages.`)
-        message.delete({timeout: 60000})
+        // send a general message in Discord (disabled)
+        // let message = await config.mainChannel.send(`Winners were chosen for ${lotteryName}. ${userTags}, please check your direct messages.`)
+        // message.delete({timeout: 60000})
 
         // send DMs
         const lottery = await datastore.findLotteryById(data.lotteryId)
 
-        let messageContent = `:smile: You won the ${lotteryName} lottery! Here are the details:\n`
+        // let messageContent = `:smile: You won the ${lotteryName} lottery! Here are the details:\n`
+        let messageContent = `You are the chosen one! Here is the name and password of the game!\n`
         messageContent = messageContent + buildWinningLotteryDetails(lottery)
 
         for (let userEntry of data.users) {
@@ -83,7 +84,8 @@ function listenForEvents() {
                 let message = await user.send(messageContent)
             } catch (e) {
                 logger.error('Failed to DM')                
-                let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
+                // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
+                let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
                 message.delete({timeout: 20000})
             }
         }
@@ -225,19 +227,22 @@ async function findUserById(guild, id) {
 
 async function launchLottery(lotteryName, lotteryId) {
     // create a message
-    let message = await config.mainChannel.send(`The ${lotteryName} lottery is active. React with ${REACT_EMOJI} to enter.`)
+    // let message = await config.mainChannel.send(`The ${lotteryName} lottery is active. React with ${REACT_EMOJI} to enter.`)
+    let message = await config.mainChannel.send(`Private Match is open, react for your chance to play! :sunglasses:`)
     await launchLotteryReactor(lotteryName, lotteryId, message)
 
     // save the message id to the lottery
-    datastore.updateLottery(lotteryId, { discordMsgId: message.id })
+    await datastore.updateLottery(lotteryId, { discordMsgId: message.id })
 
     // react
-    message.react(REACT_EMOJI)
+    await message.react(REACT_EMOJI)
 
     return message
 }
 
 async function launchLotteryReactor(lotteryName, lotteryId, message) {
+    // logger.debug('[launchLotteryReactor]')
+
     const filter = (reaction, user) => {
         // logger.debug('[launchLotteryReactor] filter: reaction '+JSON.stringify(reaction,null,2))
         return reaction.emoji.name === REACT_EMOJI && user.id !== message.author.id;
@@ -251,59 +256,75 @@ async function launchLotteryReactor(lotteryName, lotteryId, message) {
         collectReaction(lotteryName, lotteryId, user)
     });
 
-
     // remove
     collector.on('remove', async (reaction, user) => {
-        logger.debug(`Removed ${reaction.emoji.name} from ${user.tag}`);
-        let entry = await datastore.findLotteryEntry(lotteryId, user.tag)
-        if (entry && entry.chosenRound == null) {
-            // remove unchosen entries
-            let result = await datastore.removeLotteryEntry(lotteryId, user.tag)
-            eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
-
-            // try to send a DM
-            try {
-                let message = await user.send(`You are no longer entered in the ${lotteryName} lottery.`)
-                message.delete({timeout: 10000})
-            } catch (e) {
-                logger.error('Failed to send DM. '+e)
-            }
-        }
+        logger.debug(`Removed ${reaction.emoji.name} from ${user.tag}: ${user.id}`);
+        collectUnReaction(lotteryName, lotteryId, user)
     });
 }
 
 async function collectReaction(lotteryName, lotteryId, user) {
-    let result = await datastore.addLotteryEntry(lotteryId, user.id, user.tag)
-    if (result.wasAdded) {
-        eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
+    let result = await datastore.activateLotteryEntry(lotteryId, user.id, user.tag)
+    // logger.debug('collectReaction result '+JSON.stringify(result,null,2))
+    eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
 
+    if (result.wasAdded) {
         // try to send a DM
         try {
             let message = await user.send(`You are entered in the ${lotteryName} lottery`)
             message.delete({timeout: 10000})
         } catch (e) {
             logger.error('Failed to DM')                
-            let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
+            // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
+            let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
             message.delete({timeout: 20000})
         }
     }
 
 }
 
+async function collectUnReaction(lotteryName, lotteryId, user) {
+    let result = await datastore.deActivateLotteryEntry(lotteryId, user.id, user.tag)
+    // logger.debug('collectUnReaction result '+JSON.stringify(result,null,2))
+
+    eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
+
+    // try to send a DM
+    try {
+        let message = await user.send(`You are no longer entered in the ${lotteryName} lottery.`)
+        message.delete({timeout: 10000})
+    } catch (e) {
+        logger.error('Failed to send DM. '+e)
+    }
+}
+
 async function handleExistingReactions(lotteryName, lotteryId, message) {
-    logger.debug('[handleExistingReactions]')
+    let positiveReactionUserIdsMap = {}
+
+    // logger.debug('[handleExistingReactions]')
     const myUserId = client.user.id
     for (let [id, reaction] of message.reactions.cache) {
-        logger.debug('[handleExistingReactions] reaction '+id)
+        // logger.debug('[handleExistingReactions] reaction '+id)
         let users = await reaction.users.fetch()
         for (let [uid, user] of users) {
-            logger.debug('[handleExistingReactions] user '+uid)
+            // logger.debug('[handleExistingReactions] user '+uid)
             if (user.id != myUserId) {
                 logger.debug('found an existing reaction for user: '+user.tag)
                 collectReaction(lotteryName, lotteryId, user)
+                positiveReactionUserIdsMap[user.id] = true
             } else {
-                logger.debug('found MY reaction with tag: '+user.tag)
+                // logger.debug('found MY reaction with tag: '+user.tag)
             }
+        }
+    }
+
+    // find any stale reaction entries that were not in the map
+    const allActiveEntries = await datastore.getActiveLotteryEntries(lotteryId)
+    for (let entry of allActiveEntries) {
+        if (positiveReactionUserIdsMap[entry.userId] == null) {
+            logger.debug('found a stale reaction for user: '+entry.username)
+            let user = await findUserById(config.mainGuild, entry.userId)
+            collectUnReaction(lotteryName, lotteryId, user)
         }
     }
 }
@@ -313,7 +334,8 @@ async function deleteLottery(lottery) {
         let message = await config.mainChannel.messages.fetch(lottery.discordMsgId)
         message.delete({})
 
-        let deletedNoticeMessage = await config.mainChannel.send(`The ${lottery.name} lottery is over.`)
+        // let deletedNoticeMessage = await config.mainChannel.send(`The ${lottery.name} lottery is over.`)
+        let deletedNoticeMessage = await config.mainChannel.send(`Games are now closed.`)
         deletedNoticeMessage.delete({timeout: 30000})
 
     } catch (e) {
@@ -335,10 +357,6 @@ commands.greetings = commands.hello
 
 
 // ------------------------------------------------------------------------
-
-adminCommands.power = function(parsedMsg) {
-    // client.say(channel, `${tags.username} is an admin. Roar.`)
-}
 
 // ------------------------------------------------------------------------
 

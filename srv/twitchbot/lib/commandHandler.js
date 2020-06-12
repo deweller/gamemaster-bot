@@ -104,13 +104,16 @@ function hasActiveLotteries(lotteries) {
 }
 
 function pullActiveLotteries(lotteries) {
-    let filteredLotteries = []
-    for (let lottery of lotteries) {
-        if (lottery.chosenRound == null) {
-            filteredLotteries.push(lottery)
-        }
-    }
-    return filteredLotteries
+    // all lotteries are active for now
+    return lotteries
+
+    // let filteredLotteries = []
+    // for (let lottery of lotteries) {
+    //     if (lottery.currentRound == null) {
+    //         filteredLotteries.push(lottery)
+    //     }
+    // }
+    // return filteredLotteries
 }
 
 async function checkReminders() {
