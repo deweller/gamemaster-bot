@@ -20,9 +20,6 @@
 
 
             <template v-if="getUser().isAdmin">
-            <li class="nav-item" :class="{active: this.$route.name == 'dashboard'}">
-              <router-link class="nav-link" :to="{name:'dashboard'}"><i class="fas fa-user mr-1"></i>User Home</router-link>
-            </li>
             <li class="nav-item" :class="{active: this.$route.name == 'adminDashboard'}">
               <router-link class="nav-link" :to="{name:'adminDashboard'}"><i class="fas fa-crown mr-1"></i>Admin</router-link>
             </li>

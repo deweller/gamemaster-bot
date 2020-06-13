@@ -11,16 +11,6 @@ export async function getUser() {
 }
 
 // ------------------------------------------------------------------------
-// user
-
-// export async function getUserLotteries() {
-//     return await wrapCall(async () => {
-//         return await axios.get(formatUrl(`/rest/user/lotteries`), requestConfig)
-//     })
-// }
-
-
-// ------------------------------------------------------------------------
 // admin
 
 export async function getLotteryById(id) {

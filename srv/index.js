@@ -184,38 +184,6 @@ export default (app, http) => {
     });
   })
 
-  // app.get('/rest/user/lotteries', requireUser, async (req, res) => {
-  //   const user = req.session.user
-  //   const username = user.login
-
-  //   let allLotteries = await datastore.getLotteries()
-  //   let filteredLotteries = []
-  //   for (let lottery of allLotteries) {
-  //     let entry = await datastore.findLotteryEntry(lottery._id, username)
-  //     const userWon = (entry != null && entry.chosenRound != null)
-  //     let details = {}
-  //     if (userWon) {
-  //       details.matchName = lottery.matchName
-  //       details.matchPassword = lottery.matchPassword
-  //       details.comments = lottery.comments
-  //     }
-  //     let filteredLottery = {
-  //       _id: lottery._id,
-  //       name: lottery.name,
-  //       userIsEntered: entry != null,
-  //       userWon: userWon,
-  //       hasWinners: lottery.chosenRound != null,
-  //       details: details,
-  //     }
-  //     filteredLotteries.push(filteredLottery)
-  //   }
-
-  //   res.json({models: filteredLotteries})
-  //   return
-  // })
-
-
-
   // ------------------------------------------------------------------------
   // Admin API
 
