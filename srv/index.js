@@ -326,6 +326,8 @@ export default (app, http) => {
       const id = req.params.id
       const postedData = req.body
       const lottery = await datastore.findLotteryById(id)
+      const addToPreviousRound = postedData.addToPreviousRound == null ? false : (!!postedData.addToPreviousRound)
+      logger.debug('addToPreviousRound: ' + JSON.stringify(addToPreviousRound,null,2))
 
       if (lottery == null) {
         res.status(404).json({
@@ -336,20 +338,32 @@ export default (app, http) => {
       }
 
       // choose winners for a lottery
-      const roundNumber = lottery.currentRound || 1
+      let currentRoundNumber = lottery.currentRound || 1
+      if (addToPreviousRound) {
+        currentRoundNumber = currentRoundNumber - 1
+        if (currentRoundNumber < 1) {
+          currentRoundNumber = 1
+        }
+      }
+      let previousRoundNumber = currentRoundNumber - 1
+      logger.debug('currentRoundNumber: ' + JSON.stringify(currentRoundNumber,null,2))
+
+
 
       // get all active entries
       const allActiveEntries = await datastore.getActiveLotteryEntries(lottery._id)
       let unChosenIds = []
       let usersByEntryId = {}
       for (let entry of allActiveEntries) {
-        if (entry.chosenRound == null || entry.chosenRound != roundNumber - 1) {
+        console.log('entry.chosenRound: '+JSON.stringify(entry.chosenRound,null,2))
+        if (entry.chosenRound == null || (entry.chosenRound != previousRoundNumber && entry.chosenRound != currentRoundNumber)) {
           unChosenIds.push(entry._id)
           usersByEntryId[entry._id] = {
             username: entry.username,
             userId: entry.userId,
             active: entry.active,
           }
+          logger.debug('adding to unChosenIds:  '+JSON.stringify(entry.username,null,2))
         }
       }
 
@@ -368,11 +382,13 @@ export default (app, http) => {
 
       let updateCount = 0
       updateCount = await datastore.updateLotteryEntryWinners(chosenIds, {
-        chosenRound: roundNumber,
+        chosenRound: currentRoundNumber,
       })
 
       // update the lottery with the next round
-      datastore.updateLottery(lottery._id, {currentRound: roundNumber + 1})
+      if (!addToPreviousRound) {
+        datastore.updateLottery(lottery._id, {currentRound: currentRoundNumber + 1})
+      }
 
       eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
 
@@ -381,7 +397,34 @@ export default (app, http) => {
       for (let chosenId of chosenIds) {
         winningUsers.push(usersByEntryId[chosenId])
       }
+      // logger.debug('winningUsers:  '+JSON.stringify(winningUsers,null,2))
       eventEmitter.emit('winnersChosen', { lotteryName: lottery.name, lotteryId: lottery._id, users: winningUsers })
+
+      res.json({})
+      return
+    });
+
+    app.post('/rest/admin/lottery/:id/reset', requireUser, isAdmin, async (req, res) => {
+      const id = req.params.id
+      const postedData = req.body
+      const lottery = await datastore.findLotteryById(id)
+
+      if (lottery == null) {
+        res.status(404).json({
+          success: false,
+          message: 'Lottery not found',
+        })
+        return
+      }
+
+      // deactivate all active entries
+      const allActiveEntries = await datastore.getActiveLotteryEntries(lottery._id)
+      for (let entry of allActiveEntries) {
+        datastore.deActivateLotteryEntry(lottery._id, entry.userId, entry.username)
+      }
+
+      eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
+      eventEmitter.emit('lotteryReset', { lotteryId: lottery._id })
 
       res.json({})
       return
@@ -440,7 +483,7 @@ export default (app, http) => {
   io.on("connection", client => {
     logger.debug(`client ${client.id} connected`)
 
-    const eventsToRelay = ['userAdded', 'entryUpdated', 'lotteryUpdated']
+    const eventsToRelay = ['entryUpdated', 'lotteryUpdated']
 
     // init subscriptions and event relay functions
     let subscriptions = {}

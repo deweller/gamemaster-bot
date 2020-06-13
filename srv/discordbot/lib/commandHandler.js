@@ -90,6 +90,17 @@ function listenForEvents() {
             }
         }
     })
+
+    eventEmitter.on('lotteryReset', async (data) => {
+        const lottery = await datastore.findLotteryById(data.lotteryId)
+
+        // remove the lottery message
+        await removeLotteryMessage(lottery)
+
+        // launch the message again
+        const message = await launchLottery(lottery.name, lottery._id)
+    })
+
 }
 
 function buildWinningLotteryDetails(lottery) {
@@ -228,7 +239,7 @@ async function findUserById(guild, id) {
 async function launchLottery(lotteryName, lotteryId) {
     // create a message
     // let message = await config.mainChannel.send(`The ${lotteryName} lottery is active. React with ${REACT_EMOJI} to enter.`)
-    let message = await config.mainChannel.send(`Private Match is open, react for your chance to play! :sunglasses:`)
+    let message = await config.mainChannel.send(`Private Match is open, react for your chance to play! :sunglasses:\nYou need to have DMs open to get your invite if you win.`)
     await launchLotteryReactor(lotteryName, lotteryId, message)
 
     // save the message id to the lottery
@@ -268,17 +279,15 @@ async function collectReaction(lotteryName, lotteryId, user) {
     // logger.debug('collectReaction result '+JSON.stringify(result,null,2))
     eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
 
-    if (result.wasAdded) {
-        // try to send a DM
-        try {
-            let message = await user.send(`You are entered in the ${lotteryName} lottery`)
-            message.delete({timeout: 10000})
-        } catch (e) {
-            logger.error('Failed to DM')                
-            // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
-            let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
-            message.delete({timeout: 20000})
-        }
+    // try to send a DM
+    try {
+        let message = await user.send(`You are entered in the ${lotteryName} lottery`)
+        message.delete({timeout: 10000})
+    } catch (e) {
+        logger.error('Failed to DM')                
+        // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
+        let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
+        message.delete({timeout: 20000})
     }
 
 }
@@ -330,16 +339,25 @@ async function handleExistingReactions(lotteryName, lotteryId, message) {
 }
 
 async function deleteLottery(lottery) {
-    try {
-        let message = await config.mainChannel.messages.fetch(lottery.discordMsgId)
-        message.delete({})
+    await removeLotteryMessage(lottery)
 
+    try {
         // let deletedNoticeMessage = await config.mainChannel.send(`The ${lottery.name} lottery is over.`)
         let deletedNoticeMessage = await config.mainChannel.send(`Games are now closed.`)
         deletedNoticeMessage.delete({timeout: 30000})
-
     } catch (e) {
-        logger.error('failed to delete lottery message '+e)
+        logger.error('failed to delete lottery '+e)
+    }
+}
+
+async function removeLotteryMessage(lottery) {
+    try {
+        const message = await config.mainChannel.messages.fetch(lottery.discordMsgId)
+        if (message) {
+            message.delete({})
+        }
+    } catch (e) {
+        logger.error('failed to remove lottery message '+e)
     }
 }
 

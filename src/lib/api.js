@@ -38,6 +38,11 @@ export async function chooseLotteryWinners(id, postData) {
         return await axios.post(formatUrl(`/rest/admin/lottery/${id}/winners`), postData, requestConfig)
     })
 }
+export async function resetLottery(id, postData) {
+    return await wrapCall(async () => {
+        return await axios.post(formatUrl(`/rest/admin/lottery/${id}/reset`), postData, requestConfig)
+    })
+}
 export async function deleteLotteryById(id) {
     return await wrapCall(async () => {
         return await axios.delete(formatUrl(`/rest/admin/lottery/${id}`), requestConfig)

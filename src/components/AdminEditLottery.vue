@@ -4,7 +4,7 @@
           <ol class="breadcrumb">
             <li class="breadcrumb-item"><router-link :to="{name: 'adminDashboard'}">Home</router-link></li>
             <li class="breadcrumb-item"><router-link :to="{name: 'adminLotteries'}">Lotteries</router-link></li>
-            <li class="breadcrumb-item active" aria-current="page">Lottery {{activeLottery.name}}</li>
+            <li class="breadcrumb-item active" aria-current="page">Lottery {{lottery.name}}</li>
           </ol>
         </nav>
 
@@ -13,8 +13,8 @@
             <ErrorComponent v-if="apiErrorMessage" :error="apiErrorMessage"></ErrorComponent>
             <ErrorComponent v-if="winnersApiErrorMessage" :error="winnersApiErrorMessage"></ErrorComponent>
 
-            <template v-if="lottery && lottery._id">
-                <h1 class="mt-4 text-center">Lottery {{activeLottery.name}}</h1>
+            <template v-if="editableLottery && editableLottery._id">
+                <h1 class="mt-4 text-center">Lottery {{lottery.name}}</h1>
                 <div class="text-center text-muted">Users can enter this lottery by reacting to the message in Discord.</div>
 
                 <ul class="nav nav-tabs mt-4 mb-4">
@@ -39,7 +39,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label for="lotteryName">Lottery Name</label>
-                                <input @input="changed" type="text" required maxlength="32" class="form-control" id="lotteryName" placeholder="Game One" v-model="lottery.name">
+                                <input @input="changed" type="text" required maxlength="32" class="form-control" id="lotteryName" placeholder="Game One" v-model="editableLottery.name">
                             </div>
                         </div>
                     </div>
@@ -47,7 +47,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label for="matchName">Private Match Name</label>
-                                <input @input="changed" type="text" maxlength="32" class="form-control" id="matchName" placeholder="My Match" v-model="lottery.matchName">
+                                <input @input="changed" type="text" maxlength="32" class="form-control" id="matchName" placeholder="My Match" v-model="editableLottery.matchName">
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -55,7 +55,7 @@
                                 <label for="matchPassword">Private Match Password</label>
                                 <div class="input-group">
                                     <template v-if="!showPassword">
-                                        <input @input="changed" type="password" maxlength="32" class="form-control" id="matchPassword" placeholder="seekr3t" v-model="lottery.matchPassword">
+                                        <input @input="changed" type="password" maxlength="32" class="form-control" id="matchPassword" placeholder="seekr3t" v-model="editableLottery.matchPassword">
                                         <div class="input-group-append">
                                             <div class="input-group-text">
                                                 <a @click.prevent="showPassword = true" href="#show-password"><i class="fas fa-eye"></i></a>
@@ -64,7 +64,7 @@
                                     </template>
 
                                     <template v-if="showPassword">
-                                        <input @input="changed" type="text" maxlength="32" class="form-control" id="matchPassword" placeholder="seekr3t" v-model="lottery.matchPassword">
+                                        <input @input="changed" type="text" maxlength="32" class="form-control" id="matchPassword" placeholder="seekr3t" v-model="editableLottery.matchPassword">
                                         <div class="input-group-append">
                                             <div class="input-group-text">
                                                 <a @click.prevent="showPassword = false" href="#show-password"><i class="fas fa-eye-slash"></i></a>
@@ -82,7 +82,7 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label for="comments">Comments</label>
-                                <textarea @input="changed" class="form-control" v-model="lottery.comments" id="comments" rows="4" maxlength="1024"></textarea>
+                                <textarea @input="changed" class="form-control" v-model="editableLottery.comments" id="comments" rows="4" maxlength="1024"></textarea>
                             </div>
                         </div>
                     </div>
@@ -118,42 +118,69 @@
                     </div>
 
                     <div v-if="winnerCount != null" class="text-center mt-3">
-                        <span class="text-muted">Winners chosen in this round will be excluded from the next round of winners.</span>
+                        <div v-if="currentLotteryRound > 1" class="mb-0">
+                            <div class="add-to-previous-round" :class="{'add-to-previous-round-disabled': this.choosing}">
+                                <a @click.prevent="toggleAddToPreviousRound" id="NewRound" href="#previous-round">
+                                    <i v-if="addToPreviousRound" class="far fa-check-square"></i>
+                                    <i v-if="!addToPreviousRound" class="far fa-square"></i>
+                                    <label for="NewRound">Add these winners to the previous round instead of creating a new round</label>
+                                </a>
+                            </div>
+                        </div>
+                        <div v-if="!addToPreviousRound" class="text-muted">Winners chosen in this round will be excluded from the next round of winners.</div>
+                        <div v-if="addToPreviousRound" class="text-muted">Winners chosen will be added to the current round of winners.</div>
                     </div>
-                    <div v-if="winnerCount != null && !hasMatchDetails" class="text-center mt-3">
+                    <div v-if="winnerCount != null && !hasMatchDetails" class="text-center mt-">
                         <span class="text-danger">Please enter some match details before choosing winners.</span>
                     </div>
 
-                    <div class="text-center mt-3">
+                    <div class="text-center mt-4">
                         <a @click.prevent="submitChooseWinners()" href="#choose-winners" class="btn btn-primary" :class="{disabled: winnerCount == null || !hasMatchDetails || choosing}">Choose Winners</a>
                         <a @click.prevent="winnerCount = null" href="#cancel-winners" class="btn btn-secondary ml-3" :class="{disabled: winnerCount == null || choosing}">Cancel</a>
                     </div>
 
+
                     <hr class="my-4">
-                    <h3 class="mt-4">Entrants</h3>
+                    <h3 class="mt-4">{{eligibleEntries.length}} Entrants</h3>
                     <template v-if="eligibleEntries.length > 0">
                     <div class="entries">
                         <template v-for="entry of eligibleEntries">
                             <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
                         </template>
                     </div>
-                    <div class="mt-3 text-muted">{{eligibleEntries.length}} people are in the lottery.</div>
+
                     </template>
                     <template v-if="eligibleEntries.length == 0">
                         <div class="text-muted">Nobody has entered yet.</div>
                     </template>
 
+                    <!-- Reset -->
+                    <template v-if="eligibleEntries.length > 0">
+                        <hr class="my-4">
+                        <h3 class="mt-4">Reset</h3>
+                        <div class="mb-4">Resetting the lottery will remove all {{eligibleEntries.length}} entrants.  They will need to react again to join the lottery.  Previous round winners will remain.</div>
+                        <ErrorComponent v-if="resetApiErrorMessage" :error="resetApiErrorMessage"></ErrorComponent>
+                        <template v-if="confirmReset">
+                            <div class="mb-2"><strong>Are you sure you want to reset the lottery?</strong></div>
+                            <a @click.prevent="submitResetLottery" href="#reset-lottery-confirm" class="btn btn-danger" :class="{disabled: resetting}">Yes, Reset the Lottery</a>
+                            <a @click.prevent="cancelResetLottery" href="#cancel-reset" class="btn btn-secondary ml-3" :class="{disabled: resetting}">Cancel</a>
+                        </template>
+                        <template v-if="!confirmReset">
+                            <a @click.prevent="confirmReset = true" href="#reset-lottery" class="btn btn-primary" :class="{disabled: confirmReset}">Reset Lottery</a>
+                        </template>
+                    </template>
+
 
                     <template v-if="currentLotteryRound > 1">
                     <hr class="my-4">
-                    <h3 class="mt-4">Round {{ currentLotteryRound - 1 }} Winners</h3>
+                    <h3 class="mt-4">{{winningEntries.length}} Winners for Round {{ currentLotteryRound - 1 }}</h3>
                     <template v-if="winningEntries.length > 0">
                     <div class="entries">
                         <template v-for="entry of winningEntries">
                             <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
                         </template>
                     </div>
-                    <div class="mt-3 text-muted">{{winningEntries.length}} people were winners round {{ currentLotteryRound - 1 }}.</div>
+                    <div class="mt-3 text-muted">These {{winningEntries.length}} winners will be ineligible to win round {{ currentLotteryRound }}.</div>
                     </template>
                     <template v-if="winningEntries.length == 0">
                         <div class="text-muted">No winners for {{ currentLotteryRound - 1 }}.</div>
@@ -249,6 +276,25 @@
         color: white;
     }
 
+    .add-to-previous-round {
+        font-size: 1.2rem;
+
+        i {
+            margin-right: 0.5rem;
+        }
+        a {
+            color: inherit;
+            label {
+                cursor: pointer;
+                font-weight: bold;
+                // font-size: 1.2rem;
+            }
+        }
+    }
+
+    .add-to-previous-round-disabled {
+        opacity: 0.35;
+    }
 
 </style>
 
@@ -268,9 +314,9 @@ export default {
     props: {},
     data() {
         return {
-            lottery: {},
             rawEntries: [],
-            activeLottery: {},
+            lottery: {},
+            editableLottery: {},
 
             showPassword: false,
 
@@ -282,9 +328,14 @@ export default {
             deleting: false,
             apiErrorMessage: null,
             winnersApiErrorMessage: null,
+            resetApiErrorMessage: null,
 
+            addToPreviousRound: false,
             chooseComplete: false,
             choosing: false,
+
+            confirmReset: false,
+            resetting: false,
 
             navTab: 'edit',
 
@@ -306,17 +357,24 @@ export default {
             this.sendSubscriptions()
         },
         entryUpdated: function (data) {
-            console.log('entryUpdated heard', JSON.stringify(data,null,2))
-            console.log('[entryUpdated] lotteryId', JSON.stringify(data.lotteryId,null,2))
             if (this.lottery && data.lotteryId == this.lottery._id) {
                 // reload lottery entries
-                this.reloadLotteryEntries(this.lottery._id)
+                this.reloadLottery()
+            }
+        },
+        lotteryUpdated: function (data) {
+            if (this.lottery && data.lotteryId == this.lottery._id) {
+                // the lottery was updated - reload the lottery data
+                this.reloadLottery()
             }
         }
     },
     methods: {
         sendSubscriptions() {
-            this.$socket.emit('subscribe', [{name:'entryUpdated',username:'*'}])
+            this.$socket.emit('subscribe', [
+                {name:'entryUpdated',username:'*'},
+                {name:'lotteryUpdated'},
+            ])
         },
         changed() {
             this.anyChanges = true
@@ -326,35 +384,38 @@ export default {
             this.navTab = newNavTab
         },
         async loadLottery(lotteryId) {
-            this.apiErrorMessage = ''
             this.loading = true
-            let response = await api.getLotteryById(lotteryId)
-            // console.log('loadLottery response', JSON.stringify(response, null, 2))
-
-            if (response.success) {
-                // load the lottery
-                this.lottery = response.data.model
-
-                // filter entries
-                this.rawEntries = response.data.entries
-
+            let responseData = await this.loadLotteryDataFromAPI(lotteryId)
+            if (responseData) {
                 // set the active lottery object
-                this.activeLottery = JSON.parse(JSON.stringify(response.data.model))
-            } else {
-                this.apiErrorMessage = response.error
+                this.lottery = JSON.parse(JSON.stringify(responseData.lottery))
+                // set the editable lottery object
+                this.editableLottery = JSON.parse(JSON.stringify(responseData.lottery))
+                this.rawEntries = responseData.entries
             }
-
             this.loading = false
         },
-        async reloadLotteryEntries(lotteryId) {
+        async reloadLottery() {
+            let responseData = await this.loadLotteryDataFromAPI(this.lottery._id)
+            if (responseData) {
+                // set the active lottery object
+                this.lottery = JSON.parse(JSON.stringify(responseData.lottery))
+                this.rawEntries = responseData.entries
+            }
+        },
+        async loadLotteryDataFromAPI(lotteryId) {
+            this.apiErrorMessage = ''
             let response = await api.getLotteryById(lotteryId)
-            // console.log('loadLottery response', JSON.stringify(response, null, 2))
 
             if (response.success) {
-                this.rawEntries = response.data.entries
+                return {
+                    lottery: response.data.model,
+                    entries: response.data.entries,
+                }
             }
 
-            this.loading = false
+            this.apiErrorMessage = response.error
+            return null
         },
         async executeDelete() {
             this.deleting = true
@@ -380,19 +441,19 @@ export default {
             if (this.saving) {
                 return
             }
-            console.log('saving lottery', JSON.stringify(this.lottery, null, 2))
+            console.log('saving lottery', JSON.stringify(this.editableLottery, null, 2))
 
             this.saveComplete = false
             this.apiErrorMessage = ''
             this.saving = true
-            let response = await api.updateLotteryById(this.lottery._id, this.lottery)
+            let response = await api.updateLotteryById(this.lottery._id, this.editableLottery)
             console.log('response', JSON.stringify(response, null, 2))
 
             if (response.success) {
                 // this.$router.push({ name: 'adminLotteries' })
                 this.anyChanges = false
                 this.saveComplete = true
-                this.activeLottery = JSON.parse(JSON.stringify(this.lottery))
+                this.lottery = JSON.parse(JSON.stringify(this.editableLottery))
             } else {
                 this.apiErrorMessage = response.error
             }
@@ -416,49 +477,83 @@ export default {
             }
         },
 
+        toggleAddToPreviousRound() {
+            if (!this.choosing) {
+                this.addToPreviousRound = !this.addToPreviousRound
+            }
+        },
+
         async submitChooseWinners() {
             if (this.winnerCount == null) {
                 return
             }
 
             console.log('submitChooseWinners this.winnerCount',JSON.stringify(this.winnerCount,null,2))
-            if (this.saving) {
+            if (this.choosing) {
                 return
             }
-            console.log('saving lottery', JSON.stringify(this.lottery, null, 2))
-
             this.chooseComplete = false
             this.winnersApiErrorMessage = ''
             this.choosing = true
             let response = await api.chooseLotteryWinners(this.lottery._id, {
-                winnerCount: this.winnerCount
+                winnerCount: this.winnerCount,
+                addToPreviousRound: this.addToPreviousRound,
             })
             console.log('response', JSON.stringify(response, null, 2))
 
             if (response.success) {
                 // this.$router.push({ name: 'adminLotteries' })
                 this.chooseComplete = true
+                this.winnerCount = null
+                this.addToPreviousRound = false
             } else {
                 this.winnersApiErrorMessage = response.error
             }
 
             this.choosing = false
-            this.winnerCount = null
+
+            // // reload the lottery...
+        },
+
+        async cancelResetLottery() {
+            if (this.resetting) {
+                return
+            }
+
+            this.confirmReset = false
+        },
+
+        async submitResetLottery() {
+            if (this.resetting) {
+                return
+            }
+
+            this.resetApiErrorMessage = ''
+            this.resetting = true
+            let response = await api.resetLottery(this.lottery._id, {})
+            this.resetting = false
+
+            if (response.success) {
+                // do nothing
+                this.confirmReset = false
+            } else {
+                this.resetApiErrorMessage = response.error
+            }
+
 
             // reload the lottery...
-            this.loadLottery(this.lottery._id)
         },
     },
 
     computed: {
         hasMatchDetails() {
-            if (this.lottery.comments != null && this.lottery.comments.length > 0) {
+            if (this.editableLottery.comments != null && this.editableLottery.comments.length > 0) {
                 return true
             }
-            if (this.lottery.matchName != null && this.lottery.matchName.length > 0) {
+            if (this.editableLottery.matchName != null && this.editableLottery.matchName.length > 0) {
                 return true
             }
-            if (this.lottery.matchPassword != null && this.lottery.matchPassword.length > 0) {
+            if (this.editableLottery.matchPassword != null && this.editableLottery.matchPassword.length > 0) {
                 return true
             }
 

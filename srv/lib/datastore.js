@@ -193,7 +193,7 @@ exports.upsertLotteryEntry = async function (lotteryId, userId, username, active
     }
 
     return new Promise((resolve, reject) => {
-        entriesDb.update({ entryKey: entryKey }, { $set: entryDoc }, { upsert: true }, function (err, numReplaced, newEntryDoc, wasInserted) {
+        entriesDb.update({ entryKey: entryKey }, { $set: entryDoc, $inc: {nonce: 1} }, { upsert: true }, function (err, numReplaced, newEntryDoc, wasInserted) {
             if (err) {
                 reject(err)
                 return
