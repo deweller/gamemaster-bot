@@ -22,7 +22,7 @@
                         <a @click.prevent="changeNav('edit')" class="nav-link" :class="{'active': navTab == 'edit'}" href="#edit">Match Details</a>
                     </li>
                     <li class="nav-item">
-                        <a @click.prevent="changeNav('entries')" class="nav-link" :class="{'active': navTab == 'entries'}" href="#entries">Participants <span v-if="eligibleEntries.length > 0 || winningEntries.length > 0">({{eligibleEntries.length + winningEntries.length}})</span></a>
+                        <a @click.prevent="changeNav('entries')" class="nav-link" :class="{'active': navTab == 'entries'}" href="#entries">Participants <span v-if="eligibleEntries.length > 0 || allWinningEntries.length > 0">({{eligibleEntries.length + allWinningEntries.length}})</span></a>
                     </li>
                     <li class="nav-item">
                         <a @click.prevent="changeNav('delete')" class="nav-link" :class="{'active': navTab == 'delete'}" href="#delete">Delete</a>
@@ -104,8 +104,7 @@
 
                 <!-- entries -->
                 <template v-if="navTab == 'entries'">
-                    <h3 class="mt-4">Choose some winners</h3>
-                    <p>Click the number of winners to choose for round {{ currentLotteryRound }}.</p>
+                    <h3 class="mt-4 mb-3 text-center">Choose some winners for round {{currentLotteryRound}}</h3>
 
                     <div class="choices" :class="{'choices-disabled': choosing}">
                     <template v-for="number in 10">
@@ -123,7 +122,7 @@
                                 <a @click.prevent="toggleAddToPreviousRound" id="NewRound" href="#previous-round">
                                     <i v-if="addToPreviousRound" class="far fa-check-square"></i>
                                     <i v-if="!addToPreviousRound" class="far fa-square"></i>
-                                    <label for="NewRound">Add these winners to the previous round instead of creating a new round</label>
+                                    <label for="NewRound">Add these winners to round {{currentLotteryRound-1}} instead of creating a new round</label>
                                 </a>
                             </div>
                         </div>
@@ -141,7 +140,7 @@
 
 
                     <hr class="my-4">
-                    <h3 class="mt-4">{{eligibleEntries.length}} Entrants</h3>
+                    <h3 class="mt-4">{{eligibleEntries.length}} Eligible Entrants</h3>
                     <template v-if="eligibleEntries.length > 0">
                     <div class="entries">
                         <template v-for="entry of eligibleEntries">
@@ -151,43 +150,47 @@
 
                     </template>
                     <template v-if="eligibleEntries.length == 0">
-                        <div class="text-muted">Nobody has entered yet.</div>
+                        <div class="text-muted">Nobody is eligible to win.</div>
                     </template>
+
+                    <!-- previous round winners -->
+                    <ErrorComponent v-if="clearApiErrorMessage" :error="clearApiErrorMessage"></ErrorComponent>
+                    <template v-if="currentLotteryRound > 1">
+                        <template v-for="roundData of winningEntriesByRound">
+                            <div :key="roundData.round">
+                                <hr class="my-4">
+                                <a href="#clear" @click.prevent="clearRoundWinners(roundData.round)" class="btn btn-danger float-right" :class="{disabled: clearing}"><i class="fas fa-trash mr-1"></i> Clear Round {{ roundData.round }} Winners</a>
+                                <h3 class="mt-4">Round {{ roundData.round }} Winners</h3>
+                                <div class="entries">
+                                    <template v-for="entry of roundData.entries">
+                                        <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
+                                    </template>
+                                </div>
+                                <div class="mt-3 text-muted">These {{roundData.entries.length}} winners will be ineligible to win round {{ currentLotteryRound }}.</div>
+                            </div>
+                        </template>
+                    </template>
+
 
                     <!-- Reset -->
                     <template v-if="eligibleEntries.length > 0">
                         <hr class="my-4">
                         <h3 class="mt-4">Reset</h3>
-                        <div class="mb-4">Resetting the lottery will remove all {{eligibleEntries.length}} entrants.  They will need to react again to join the lottery.  Previous round winners will remain.</div>
+                        <div class="mb-4">Resetting the lottery will remove all {{eligibleEntries.length}} eligble entrants.  They will need to react again to join the lottery.  Previous round winners will remain.</div>
                         <ErrorComponent v-if="resetApiErrorMessage" :error="resetApiErrorMessage"></ErrorComponent>
                         <template v-if="confirmReset">
                             <div class="mb-2"><strong>Are you sure you want to reset the lottery?</strong></div>
-                            <a @click.prevent="submitResetLottery" href="#reset-lottery-confirm" class="btn btn-danger" :class="{disabled: resetting}">Yes, Reset the Lottery</a>
+                            <a @click.prevent="submitResetLottery" href="#reset-lottery-confirm" class="btn btn-danger" :class="{disabled: resetting}"><i class="fas fa-recycle mr-2"></i>Yes, Reset the Lottery</a>
                             <a @click.prevent="cancelResetLottery" href="#cancel-reset" class="btn btn-secondary ml-3" :class="{disabled: resetting}">Cancel</a>
                         </template>
                         <template v-if="!confirmReset">
-                            <a @click.prevent="confirmReset = true" href="#reset-lottery" class="btn btn-primary" :class="{disabled: confirmReset}">Reset Lottery</a>
+                            <a @click.prevent="confirmReset = true" href="#reset-lottery" class="btn btn-primary" :class="{disabled: confirmReset}"><i class="fas fa-recycle mr-2"></i>Reset Lottery</a>
                         </template>
-                    </template>
-
-
-                    <template v-if="currentLotteryRound > 1">
-                    <hr class="my-4">
-                    <h3 class="mt-4">{{winningEntries.length}} Winners for Round {{ currentLotteryRound - 1 }}</h3>
-                    <template v-if="winningEntries.length > 0">
-                    <div class="entries">
-                        <template v-for="entry of winningEntries">
-                            <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
-                        </template>
-                    </div>
-                    <div class="mt-3 text-muted">These {{winningEntries.length}} winners will be ineligible to win round {{ currentLotteryRound }}.</div>
-                    </template>
-                    <template v-if="winningEntries.length == 0">
-                        <div class="text-muted">No winners for {{ currentLotteryRound - 1 }}.</div>
-                    </template>
                     </template>
 
                 </template>
+
+
 
                 <!-- delete -->
                 <template v-if="navTab == 'delete'">
@@ -329,6 +332,7 @@ export default {
             apiErrorMessage: null,
             winnersApiErrorMessage: null,
             resetApiErrorMessage: null,
+            clearApiErrorMessage: null,
 
             addToPreviousRound: false,
             chooseComplete: false,
@@ -336,6 +340,8 @@ export default {
 
             confirmReset: false,
             resetting: false,
+
+            clearing: false,
 
             navTab: 'edit',
 
@@ -543,6 +549,27 @@ export default {
 
             // reload the lottery...
         },
+
+        async clearRoundWinners(roundNumber) {
+            if (this.clearing) {
+                return
+            }
+
+            this.clearApiErrorMessage = ''
+            this.clearing = true
+            let response = await api.clearLotteryRound(this.lottery._id, {round: roundNumber})
+            this.clearing = false
+
+            if (response.success) {
+                // do nothing
+                this.confirmReset = false
+            } else {
+                this.clearApiErrorMessage = response.error
+            }
+
+
+            // reload the lottery...
+        },
     },
 
     computed: {
@@ -563,38 +590,53 @@ export default {
         currentLotteryRound() {
             return this.lottery.currentRound || 1
         },
-        winningEntries() {
-            return this.entriesByType.winningEntries
+        winningEntriesByRound() {
+            return this.entriesByType.winningEntriesByRound
         },
         eligibleEntries() {
             return this.entriesByType.eligibleEntries
         },
-        allEntries() {
-            return this.entriesByType.allEntries
+        allWinningEntries() {
+            return this.entriesByType.allWinningEntries
         },
+
 
         entriesByType() {
             // filter entries
-            let allEntries = []
             let eligibleEntries = []
-            let winningEntries = []
+            let allWinningEntries = []
+            let winningEntriesByRoundMap = {}
 
             for (let entry of this.rawEntries) {
-                if (entry.chosenRound == this.currentLotteryRound - 1) {
-                    winningEntries.push(entry)
-                    allEntries.push(entry)
-                } else {
-                    if (entry.active == true) {
-                        eligibleEntries.push(entry)
-                        allEntries.push(entry)
+                if (entry.chosenRound != null) {
+                    if (winningEntriesByRoundMap[entry.chosenRound] == null) {
+                        winningEntriesByRoundMap[entry.chosenRound] = []
                     }
+                    winningEntriesByRoundMap[entry.chosenRound].push(entry)
+                    allWinningEntries.push(entry)
                 }
+
+                if (entry.chosenRound == null && entry.active == true) {
+                    eligibleEntries.push(entry)
+                }
+
             }
+
+            let winningEntriesByRound = []
+            for (let round of Object.keys(winningEntriesByRoundMap)) {
+                winningEntriesByRound.push({
+                    round: round,
+                    entries: winningEntriesByRoundMap[round],
+                })
+            }
+            winningEntriesByRound.sort((a,b) => {
+                  return b.round - a.round
+            })
 
             return {
                 eligibleEntries:  eligibleEntries,
-                winningEntries:  winningEntries,
-                allEntries:  allEntries,
+                allWinningEntries:  allWinningEntries,
+                winningEntriesByRound:  winningEntriesByRound,
             }
         },
 

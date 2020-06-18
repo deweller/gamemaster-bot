@@ -208,24 +208,22 @@ exports.upsertLotteryEntry = async function (lotteryId, userId, username, active
     })
 }
 
-exports.removeLotteryEntry = async function (lotteryId, username) {
-    const entryKey = `${lotteryId}:${username}`
-
+exports.updateLotteryEntryWinners = async function (ids, updateDoc) {
     return new Promise((resolve, reject) => {
-        entriesDb.remove({ entryKey: entryKey }, function (err, numRemoved) {
+      entriesDb.update({ _id: { $in: ids } }, { $set: updateDoc}, { multi: true }, function (err, numReplaced) {
             if (err) {
-              reject(err)
-              return
+                reject(err)
+                return
             }
 
-            resolve(numRemoved)
+            resolve(numReplaced)
         })
     })
 }
 
-exports.updateLotteryEntryWinners = async function (ids, updateDoc) {
+exports.clearChosenRoundFromEntryWinners = async function (lotteryId, chosenRound) {
     return new Promise((resolve, reject) => {
-      entriesDb.update({ _id: { $in: ids } }, { $set: updateDoc}, { multi: true }, function (err, numReplaced) {
+      entriesDb.update({ lotteryId: lotteryId, chosenRound: chosenRound }, { $unset: {chosenRound: true}}, { multi: true }, function (err, numReplaced) {
             if (err) {
                 reject(err)
                 return
@@ -265,21 +263,20 @@ exports.getActiveLotteryEntries = async function (lotteryId) {
     })
 }
 
-exports.findLotteryEntry = async function (lotteryId, username) {
-    return new Promise((resolve, reject) => {
-        // Find all documents in the collection
-        const entryKey = `${lotteryId}:${username}`
+// exports.findLotteryEntry = async function (lotteryId, username) {
+//     return new Promise((resolve, reject) => {
+//         const entryKey = `${lotteryId}:${username}`
 
-        entriesDb.findOne({ entryKey: entryKey }, function (err, foundDoc) {
-            if (err) {
-              reject(err)
-              return
-            }
+//         entriesDb.findOne({ entryKey: entryKey }, function (err, foundDoc) {
+//             if (err) {
+//               reject(err)
+//               return
+//             }
 
-            resolve(foundDoc)
-        })
-    })
-}
+//             resolve(foundDoc)
+//         })
+//     })
+// }
 
 
 exports.deleteLotteryEntries = async function (lotteryId) {

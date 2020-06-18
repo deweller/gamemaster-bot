@@ -47,11 +47,9 @@ const handleMessage = function(message) {
 
 function listenForEvents() {
     eventEmitter.on('lotteryCreated', (data) => {
-        logger.debug(`[lotteryCreated] ${data.name}`)
-        launchLottery(data.name, data.lotteryId)
+        launchLottery(data.lottery)
     })
     eventEmitter.on('lotteryDeleted', (data) => {
-        logger.debug('[lotteryDeleted]')
         deleteLottery(data.lottery)
     })
     eventEmitter.on('winnersChosen', async (data) => {
@@ -85,7 +83,7 @@ function listenForEvents() {
             } catch (e) {
                 logger.error('Failed to DM')                
                 // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
-                let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
+                let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no one special. Open your damn DMs and react again! :upside_down:`);
                 message.delete({timeout: 20000})
             }
         }
@@ -98,7 +96,7 @@ function listenForEvents() {
         await removeLotteryMessage(lottery)
 
         // launch the message again
-        const message = await launchLottery(lottery.name, lottery._id)
+        const message = await launchLottery(lottery)
     })
 
 }
@@ -147,15 +145,15 @@ async function cleanupAndAttachMessages() {
         let message
 
         if (lottery.discordMsgId == null) {
-            message = await launchLottery(lottery.name, lottery._id)
+            message = await launchLottery(lottery)
         } else {
             try {
                 message = await config.mainChannel.messages.fetch(lottery.discordMsgId)
                 if (message) {
-                    await launchLotteryReactor(lottery.name, lottery._id, message)
+                    await launchLotteryReactor(lottery, message)
     
                     // handle existing reactions
-                    handleExistingReactions(lottery.name, lottery._id, message)
+                    handleExistingReactions(lottery, message)
                 }
 
             } catch (e) {
@@ -236,14 +234,13 @@ async function findUserById(guild, id) {
 
 // ------------------------------------------------------------------------
 
-async function launchLottery(lotteryName, lotteryId) {
+async function launchLottery(lottery) {
     // create a message
-    // let message = await config.mainChannel.send(`The ${lotteryName} lottery is active. React with ${REACT_EMOJI} to enter.`)
     let message = await config.mainChannel.send(`Private Match is open, react for your chance to play! :sunglasses:\nYou need to have DMs open to get your invite if you win.`)
-    await launchLotteryReactor(lotteryName, lotteryId, message)
+    await launchLotteryReactor(lottery, message)
 
     // save the message id to the lottery
-    await datastore.updateLottery(lotteryId, { discordMsgId: message.id })
+    await datastore.updateLottery(lottery._id, { discordMsgId: message.id })
 
     // react
     await message.react(REACT_EMOJI)
@@ -251,7 +248,7 @@ async function launchLottery(lotteryName, lotteryId) {
     return message
 }
 
-async function launchLotteryReactor(lotteryName, lotteryId, message) {
+async function launchLotteryReactor(lottery, message) {
     // logger.debug('[launchLotteryReactor]')
 
     const filter = (reaction, user) => {
@@ -264,24 +261,28 @@ async function launchLotteryReactor(lotteryName, lotteryId, message) {
     // collect
     collector.on('collect', async (reaction, user) => {
         logger.debug(`Collected ${reaction.emoji.name} from ${user.tag}: ${user.id}`);
-        collectReaction(lotteryName, lotteryId, user)
+        collectReaction(lottery._id, user)
     });
 
     // remove
     collector.on('remove', async (reaction, user) => {
         logger.debug(`Removed ${reaction.emoji.name} from ${user.tag}: ${user.id}`);
-        collectUnReaction(lotteryName, lotteryId, user)
+        collectUnReaction(lottery._id, user)
     });
 }
 
-async function collectReaction(lotteryName, lotteryId, user) {
-    let result = await datastore.activateLotteryEntry(lotteryId, user.id, user.tag)
-    // logger.debug('collectReaction result '+JSON.stringify(result,null,2))
-    eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
+async function collectReaction(lotteryId, user) {
+    const lottery = await datastore.findLotteryById(lotteryId)
+    if (!lottery) {
+        return
+    }
+
+    let result = await datastore.activateLotteryEntry(lottery._id, user.id, user.tag)
+    eventEmitter.emit('entryUpdated', { lotteryId: lottery._id, username: user.tag })
 
     // try to send a DM
     try {
-        let message = await user.send(`You are entered in the ${lotteryName} lottery`)
+        let message = await user.send(`You are entered in the ${lottery.name} lottery`)
         message.delete({timeout: 10000})
     } catch (e) {
         logger.error('Failed to DM')                
@@ -292,22 +293,27 @@ async function collectReaction(lotteryName, lotteryId, user) {
 
 }
 
-async function collectUnReaction(lotteryName, lotteryId, user) {
-    let result = await datastore.deActivateLotteryEntry(lotteryId, user.id, user.tag)
+async function collectUnReaction(lotteryId, user) {
+    const lottery = await datastore.findLotteryById(lotteryId)
+    if (!lottery) {
+        return
+    }
+
+    let result = await datastore.deActivateLotteryEntry(lottery._id, user.id, user.tag)
     // logger.debug('collectUnReaction result '+JSON.stringify(result,null,2))
 
-    eventEmitter.emit('entryUpdated', { lotteryId: lotteryId, username: user.tag })
+    eventEmitter.emit('entryUpdated', { lotteryId: lottery._id, username: user.tag })
 
     // try to send a DM
     try {
-        let message = await user.send(`You are no longer entered in the ${lotteryName} lottery.`)
+        let message = await user.send(`You are no longer entered in the ${lottery.name} lottery.`)
         message.delete({timeout: 10000})
     } catch (e) {
         logger.error('Failed to send DM. '+e)
     }
 }
 
-async function handleExistingReactions(lotteryName, lotteryId, message) {
+async function handleExistingReactions(lottery, message) {
     let positiveReactionUserIdsMap = {}
 
     // logger.debug('[handleExistingReactions]')
@@ -319,7 +325,7 @@ async function handleExistingReactions(lotteryName, lotteryId, message) {
             // logger.debug('[handleExistingReactions] user '+uid)
             if (user.id != myUserId) {
                 logger.debug('found an existing reaction for user: '+user.tag)
-                collectReaction(lotteryName, lotteryId, user)
+                collectReaction(lottery._id, user)
                 positiveReactionUserIdsMap[user.id] = true
             } else {
                 // logger.debug('found MY reaction with tag: '+user.tag)
@@ -328,12 +334,12 @@ async function handleExistingReactions(lotteryName, lotteryId, message) {
     }
 
     // find any stale reaction entries that were not in the map
-    const allActiveEntries = await datastore.getActiveLotteryEntries(lotteryId)
+    const allActiveEntries = await datastore.getActiveLotteryEntries(lottery._id)
     for (let entry of allActiveEntries) {
         if (positiveReactionUserIdsMap[entry.userId] == null) {
             logger.debug('found a stale reaction for user: '+entry.username)
             let user = await findUserById(config.mainGuild, entry.userId)
-            collectUnReaction(lotteryName, lotteryId, user)
+            collectUnReaction(lottery._id, user)
         }
     }
 }

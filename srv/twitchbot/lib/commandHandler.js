@@ -47,7 +47,7 @@ const handleMessage = function(message, channel, tags) {
 
 function listenForEvents() {
     eventEmitter.on('lotteryCreated', (data) => {
-        const lotteryName = data.name
+        const lotteryName = data.lottery.name
         client.say(config.myChannelName, `A new ${lotteryName} lottery has started. Please check Discord at ${process.env.DISCORD_INVITE_LINK} to enter.`)
 
         checkRemindersIfNotAlreadyRunning()

@@ -207,6 +207,7 @@ export default (app, http) => {
         try {
           lottery = await datastore.addLottery({
             name: postedData.name.substr(0, 32),
+            currentRound: 1,
             created: new Date(),
             updated: new Date(),
           })
@@ -221,7 +222,7 @@ export default (app, http) => {
           throw e
         }
 
-        eventEmitter.emit('lotteryCreated', { lotteryId: lottery._id, name: lottery.name })
+        eventEmitter.emit('lotteryCreated', { lottery: lottery })
         eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
 
         res.json({
@@ -315,6 +316,7 @@ export default (app, http) => {
       for (let entry of allEntries) {
         filteredEntries.push({
           username: entry.username,
+          round: entry.round,
           chosenRound: entry.chosenRound || null,
           active: entry.active,
         })
@@ -327,7 +329,6 @@ export default (app, http) => {
       const postedData = req.body
       const lottery = await datastore.findLotteryById(id)
       const addToPreviousRound = postedData.addToPreviousRound == null ? false : (!!postedData.addToPreviousRound)
-      logger.debug('addToPreviousRound: ' + JSON.stringify(addToPreviousRound,null,2))
 
       if (lottery == null) {
         res.status(404).json({
@@ -338,15 +339,12 @@ export default (app, http) => {
       }
 
       // choose winners for a lottery
-      let currentRoundNumber = lottery.currentRound || 1
+      let targetRoundNumber = lottery.currentRound || 1
       if (addToPreviousRound) {
-        currentRoundNumber = currentRoundNumber - 1
-        if (currentRoundNumber < 1) {
-          currentRoundNumber = 1
-        }
+        targetRoundNumber = Math.max(1, targetRoundNumber - 1)
       }
-      let previousRoundNumber = currentRoundNumber - 1
-      logger.debug('currentRoundNumber: ' + JSON.stringify(currentRoundNumber,null,2))
+      let previousRoundNumber = targetRoundNumber - 1
+      logger.debug('targetRoundNumber: ' + JSON.stringify(targetRoundNumber,null,2))
 
 
 
@@ -356,7 +354,7 @@ export default (app, http) => {
       let usersByEntryId = {}
       for (let entry of allActiveEntries) {
         console.log('entry.chosenRound: '+JSON.stringify(entry.chosenRound,null,2))
-        if (entry.chosenRound == null || (entry.chosenRound != previousRoundNumber && entry.chosenRound != currentRoundNumber)) {
+        if (entry.chosenRound == null) {
           unChosenIds.push(entry._id)
           usersByEntryId[entry._id] = {
             username: entry.username,
@@ -382,12 +380,12 @@ export default (app, http) => {
 
       let updateCount = 0
       updateCount = await datastore.updateLotteryEntryWinners(chosenIds, {
-        chosenRound: currentRoundNumber,
+        chosenRound: targetRoundNumber,
       })
 
       // update the lottery with the next round
       if (!addToPreviousRound) {
-        datastore.updateLottery(lottery._id, {currentRound: currentRoundNumber + 1})
+        datastore.updateLottery(lottery._id, {currentRound: targetRoundNumber + 1})
       }
 
       eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
@@ -399,6 +397,38 @@ export default (app, http) => {
       }
       // logger.debug('winningUsers:  '+JSON.stringify(winningUsers,null,2))
       eventEmitter.emit('winnersChosen', { lotteryName: lottery.name, lotteryId: lottery._id, users: winningUsers })
+
+      res.json({})
+      return
+    });
+
+    app.post('/rest/admin/lottery/:id/clearRound', requireUser, isAdmin, async (req, res) => {
+      const id = req.params.id
+      const postedData = req.body
+      const lottery = await datastore.findLotteryById(id)
+
+      if (lottery == null) {
+        res.status(404).json({
+          success: false,
+          message: 'Lottery not found',
+        })
+        return
+      }
+
+      const round = parseInt(postedData.round)
+
+      const allEntries = await datastore.getLotteryEntries(lottery._id)
+      for (let entry of allEntries) {
+        logger.debug(`Found entry: ${entry.lotteryId}/${entry.chosenRound}`)
+      }
+
+      // clear lottery round
+      logger.debug(`clearing lottery winners from ${lottery._id}/${round}`)
+      let numReplaced = await datastore.clearChosenRoundFromEntryWinners(lottery._id, round)
+      logger.debug(`numReplaced: ${numReplaced}`)
+
+      eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
+      eventEmitter.emit('lotteryCleared', { lotteryId: lottery._id })
 
       res.json({})
       return
@@ -451,30 +481,6 @@ export default (app, http) => {
       res.json({})
       return
     });
-
-    // ------------------------------------------------------------------------
-    
-    if (process.env.DEBUG_API_ENABLED) {
-      app.post('/rest/admin/lottery/:id/entry/:username', async (req, res) => {
-        const id = req.params.id
-        const username = req.params.username
-
-        const lottery = await datastore.findLotteryById(id)
-        if (lottery == null) {
-          res.status(404).json({
-            success: false,
-            message: 'Lottery not found',
-          })
-          return
-        }
-
-        let result = await datastore.activateLotteryEntry(lottery._id, username)
-        eventEmitter.emit('entryUpdated', { lotteryId: lottery._id, username: username })
-
-        res.json({})
-        return
-      });
-    }
 
   // ------------------------------------------------------------------------
   // socket.io
