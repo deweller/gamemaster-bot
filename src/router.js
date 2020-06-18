@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard.vue'
 import AdminLotteries from './components/AdminLotteries.vue'
 import LoginRequired from './components/LoginRequired.vue'
 import LoginFailure from './components/LoginFailure.vue'
+import UserLoginApiError from './components/UserLoginApiError.vue'
 import LoginSuccess from './components/LoginSuccess.vue'
 
 import AdminDashboard from './components/AdminDashboard.vue'
@@ -31,6 +32,14 @@ let routes = [
       },
     },
 
+    {
+      path: '/user-login-error',
+      name: 'userLoginError',
+      component: UserLoginApiError,
+      meta: {
+        requireAuth: false,
+      },
+    },
     {
       path: '/login',
       name: 'login',
@@ -122,7 +131,10 @@ router.beforeEach(async (to, from, next) => {
 
   // user
   if (to.meta.requireAuth) {
-    if (!user.isLoggedIn) {
+    if (user.isError) {
+      next({ name: 'userLoginError' })
+      return
+    } else if (!user.isLoggedIn) {
       next({ name: 'login' })
       return
     }
@@ -130,7 +142,10 @@ router.beforeEach(async (to, from, next) => {
 
   // admin
   if (to.meta.requireAdminAuth) {
-    if (!user.isLoggedIn || !user.isAdmin) {
+    if (user.isError) {
+      next({ name: 'userLoginError' })
+      return
+    } else if (!user.isLoggedIn || !user.isAdmin) {
       next({ name: 'adminLogin' })
       return
     }

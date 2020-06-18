@@ -5,7 +5,7 @@ const EXPIRE_MINUTES = 1
 let userData = {
 }
 
-let userDataExpiresAt = null
+let userDataExpiresAt = 0
 
 export function getUser() {
     return userData
@@ -32,8 +32,16 @@ export async function ensureUser() {
     if (userData.isLoggedIn == null || expired) {
         // load the user
         let userResponse = await api.getUser()
-        setUserData(userResponse.data)
-        userDataExpiresAt = Date.now() + EXPIRE_MINUTES * 60 * 1000
+        if (userResponse.success == false) {
+            console.error('failed to load user data')
+            userDataExpiresAt = 0
+            userData = {
+                isError: true
+            }
+        } else {
+            setUserData(userResponse.data)
+            userDataExpiresAt = Date.now() + EXPIRE_MINUTES * 60 * 1000
+        }
     }
 
     return userData
