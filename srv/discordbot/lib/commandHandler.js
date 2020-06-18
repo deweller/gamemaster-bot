@@ -287,7 +287,7 @@ async function collectReaction(lotteryId, user) {
     } catch (e) {
         logger.error('Failed to DM')                
         // let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. Make sure you have "Allow direct messages from server members enabled on this server" checked or you won't be able to get the informaton if you win.`);
-        let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM, you're no-one special open your damn DMs and react again! :upside_down:`);
+        let message = await config.mainChannel.send(`Hey <@${user.id}>.  I couldn't send you a DM. You're noone special. Open your damn DMs and react again! :upside_down:`);
         message.delete({timeout: 20000})
     }
 
