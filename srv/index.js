@@ -385,7 +385,12 @@ export default (app, http) => {
 
       // update the lottery with the next round
       if (!addToPreviousRound) {
-        datastore.updateLottery(lottery._id, {currentRound: targetRoundNumber + 1})
+        datastore.updateLottery(lottery._id, {
+          currentRound: targetRoundNumber + 1,
+          previousMatchName: lottery.matchName,
+          previousMatchPassword: lottery.matchPassword,
+          previousComments: lottery.comments,
+        })
       }
 
       eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })

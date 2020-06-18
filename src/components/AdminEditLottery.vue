@@ -116,6 +116,12 @@
                     </template>
                     </div>
 
+                    <div v-if="winnerCount != null && !lotteryDetailsChanged && !addToPreviousRound" class="text-center mt-3">
+                        <div class="alert alert-danger fade show mt-4" role="alert">
+                            The match details have not changed since the last drawing.  Did you forget to change them?
+                        </div>
+                    </div>
+
                     <div v-if="winnerCount != null" class="text-center mt-3">
                         <div v-if="currentLotteryRound > 1" class="mb-0">
                             <div class="add-to-previous-round" :class="{'add-to-previous-round-disabled': this.choosing}">
@@ -598,6 +604,19 @@ export default {
         },
         allWinningEntries() {
             return this.entriesByType.allWinningEntries
+        },
+
+        lotteryDetailsChanged() {
+            if (this.lottery.previousMatchName != this.lottery.matchName) {
+                return true
+            }
+            if (this.lottery.previousMatchPassword != this.lottery.matchPassword) {
+                return true
+            }
+            if (this.lottery.previousComments != this.lottery.comments) {
+                return true
+            }
+            return false
         },
 
 
