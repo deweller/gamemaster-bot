@@ -51,7 +51,7 @@ async function run() {
 
     client.on("connected", async (address, port) => {
         try {
-            await client.say(myChannelName, `Hi there.  The Lottery Bot has joined the chat.`)
+            await client.say(myChannelName, `Hi there.  Game Master has joined the chat.`)
         } catch (err) {
             logger.debug('Error while delivering connection message: ', err)
         }
