@@ -75,6 +75,41 @@ exports.findUserByUsername = async function (username) {
 }
 
 // ------------------------------------------------------------------------
+// twitch bot settings
+
+let botSettingsDb = new Datastore({
+    filename: __dirname + '/../../data/botsettings.db',
+    autoload: true
+});
+
+exports.saveBotSettings = async function (credentialsDoc) {
+    return new Promise((resolve, reject) => {
+        botSettingsDb.update({}, credentialsDoc, {upsert: true}, (err, numReplaced) => {
+            if (err) {
+                reject(err)
+                return
+            }
+
+            resolve(credentialsDoc)
+        })
+    })
+}
+
+exports.getBotSettings = async function () {
+    return new Promise((resolve, reject) => {
+        botSettingsDb.findOne({}, function (err, foundDoc) {
+            if (err) {
+              reject(err)
+              return
+            }
+
+            resolve(foundDoc || {})
+        })
+    })
+}
+
+
+// ------------------------------------------------------------------------
 // lotteries
 
 let lotteriesDb = new Datastore({
@@ -221,6 +256,20 @@ exports.updateLotteryEntryWinners = async function (ids, updateDoc) {
     })
 }
 
+exports.updateLotteryEntryByUsername = async function (lotteryId, username, updateDoc) {
+    const entryKey = `${lotteryId}:${username}`
+    return new Promise((resolve, reject) => {
+      entriesDb.update({ entryKey: entryKey }, { $set: updateDoc}, { }, function (err, numReplaced) {
+            if (err) {
+                reject(err)
+                return
+            }
+
+            resolve(numReplaced)
+        })
+    })
+}
+
 exports.clearChosenRoundFromEntryWinners = async function (lotteryId, chosenRound) {
     return new Promise((resolve, reject) => {
       entriesDb.update({ lotteryId: lotteryId, chosenRound: chosenRound }, { $unset: {chosenRound: true}}, { multi: true }, function (err, numReplaced) {
@@ -263,20 +312,20 @@ exports.getActiveLotteryEntries = async function (lotteryId) {
     })
 }
 
-// exports.findLotteryEntry = async function (lotteryId, username) {
-//     return new Promise((resolve, reject) => {
-//         const entryKey = `${lotteryId}:${username}`
+exports.findLotteryEntry = async function (lotteryId, username) {
+    return new Promise((resolve, reject) => {
+        const entryKey = `${lotteryId}:${username}`
 
-//         entriesDb.findOne({ entryKey: entryKey }, function (err, foundDoc) {
-//             if (err) {
-//               reject(err)
-//               return
-//             }
+        entriesDb.findOne({ entryKey: entryKey }, function (err, foundDoc) {
+            if (err) {
+              reject(err)
+              return
+            }
 
-//             resolve(foundDoc)
-//         })
-//     })
-// }
+            resolve(foundDoc)
+        })
+    })
+}
 
 
 exports.deleteLotteryEntries = async function (lotteryId) {

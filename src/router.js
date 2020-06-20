@@ -13,6 +13,7 @@ import AdminDashboard from './components/AdminDashboard.vue'
 import AdminLoginRequired from './components/AdminLoginRequired.vue'
 import AdminNewLottery from './components/AdminNewLottery.vue'
 import AdminEditLottery from './components/AdminEditLottery.vue'
+import AdminTwitchBotSettings from './components/AdminTwitchBotSettings.vue'
 
 let routes = [
     {
@@ -111,6 +112,14 @@ let routes = [
       path: '/admin/lotteries',
       name: 'adminLotteries',
       component: AdminLotteries,
+      meta: {
+        requireAdminAuth: true,
+      },
+    },
+    {
+      path: '/admin/twitch-bot',
+      name: 'adminTwitchBotSettings',
+      component: AdminTwitchBotSettings,
       meta: {
         requireAdminAuth: true,
       },

@@ -3,8 +3,8 @@ const tmi = require('tmi.js');
 const CommandHandler = require('./lib/commandHandler.js')
 const logger = require('../lib/logger')
 
-const myChannelName = process.env.JOIN_CHANNEL_NAME
-const botUserName = process.env.BOT_USER_NAME
+const myChannelName = process.env.TWITCH_BOT_JOIN_CHANNEL_NAME
+const botUserName = process.env.TWITCH_BOT_USER_NAME
 
 const auth = require('../lib/auth')
 const datastore = require('../lib/datastore.js')
@@ -44,14 +44,14 @@ async function run() {
 
     // setInterval(refreshBotCredentials, REFRESH_BOT_CREDENTIALS_INTERVAL)
 
-    const handler = CommandHandler.init(client, {
+    const handler = await CommandHandler.init(client, {
         admins: process.env.ADMIN_USERNAMES.split(","),
         myChannelName: myChannelName,
     })
 
     client.on("connected", async (address, port) => {
         try {
-            await client.say(myChannelName, `Hi there.  Game Master has joined the chat.`)
+            handler.onConnected()
         } catch (err) {
             logger.debug('Error while delivering connection message: ', err)
         }

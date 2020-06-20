@@ -14,6 +14,7 @@ const eventEmitter = require('./lib/lotteryEvents').emmiter
 
 const logger = require('./lib/logger')
 
+const PENALTY_BOX_ROUND = -1
 
 export default (app, http) => {
   logger.debug('Configuring express app with environment '+process.env.NODE_ENV)
@@ -343,7 +344,6 @@ export default (app, http) => {
       if (addToPreviousRound) {
         targetRoundNumber = Math.max(1, targetRoundNumber - 1)
       }
-      let previousRoundNumber = targetRoundNumber - 1
       logger.debug('targetRoundNumber: ' + JSON.stringify(targetRoundNumber,null,2))
 
 
@@ -401,11 +401,15 @@ export default (app, http) => {
         winningUsers.push(usersByEntryId[chosenId])
       }
       // logger.debug('winningUsers:  '+JSON.stringify(winningUsers,null,2))
-      eventEmitter.emit('winnersChosen', { lotteryName: lottery.name, lotteryId: lottery._id, users: winningUsers })
+      await notifyWinners(lottery, winningUsers)
 
       res.json({})
       return
     });
+
+    async function notifyWinners(lottery, winningUsers) {
+      eventEmitter.emit('winnersChosen', { lotteryName: lottery.name, lotteryId: lottery._id, users: winningUsers })
+    }
 
     app.post('/rest/admin/lottery/:id/clearRound', requireUser, isAdmin, async (req, res) => {
       const id = req.params.id
@@ -465,6 +469,49 @@ export default (app, http) => {
       return
     });
 
+    app.post('/rest/admin/lottery/:id/modifyEntries', requireUser, isAdmin, async (req, res) => {
+      const id = req.params.id
+      const postedData = req.body
+      const lottery = await datastore.findLotteryById(id)
+
+      if (lottery == null) {
+        res.status(404).json({
+          success: false,
+          message: 'Lottery not found',
+        })
+        return
+      }
+
+      for (let change of postedData.changes) {
+        if (change.penaltyBox) {
+          await datastore.updateLotteryEntryByUsername(lottery._id, change.username, {
+            chosenRound: PENALTY_BOX_ROUND,
+          })
+        }
+ 
+        if (change.chooseWinner) {
+          // find the entry
+          const entry = await datastore.findLotteryEntry(lottery._id, change.username)
+          if (entry) {
+            const targetRoundNumber = Math.max(1, lottery.currentRound - 1)
+            await datastore.updateLotteryEntryWinners([entry._id], {
+              chosenRound: targetRoundNumber,
+            })
+            const winningUsers = [{
+              username: entry.username,
+              userId: entry.userId,
+              active: entry.active,
+            }]
+            notifyWinners(lottery, winningUsers)
+          }
+        }
+      }
+
+      eventEmitter.emit('lotteryUpdated', { lotteryId: lottery._id })
+
+      res.json({})
+      return
+    });
     app.delete('/rest/admin/lottery/:id', requireUser, isAdmin, async (req, res) => {
       let lotteryId = req.params.id
       const lottery = await datastore.findLotteryById(lotteryId)
@@ -484,6 +531,65 @@ export default (app, http) => {
       eventEmitter.emit('lotteryUpdated', { lotteryId: lotteryId })
 
       res.json({})
+      return
+    });
+
+    // ------------------------------------------------------------------------
+    // bot settings
+
+    app.get('/rest/admin/botSettings', requireUser, isAdmin, async (req, res) => {
+      let botSettings = await datastore.getBotSettings()
+
+      let botSettingsData = {}
+      botSettingsData.botName = process.env.TWITCH_BOT_USER_NAME
+      botSettingsData.botChannel = process.env.TWITCH_BOT_JOIN_CHANNEL_NAME
+      botSettingsData.reminderInterval = botSettings.reminderInterval != null ? botSettings.reminderInterval : process.env.TWITCH_BOT_REMINDER_INTERVAL
+      botSettingsData.enabled = botSettings.enabled != null ? botSettings.enabled : true
+
+      res.json(botSettingsData)
+      return
+    });
+
+    app.post('/rest/admin/botSettings', requireUser, isAdmin, async (req, res) => {
+      const postedData = req.body
+      logger.debug('postedData: '+JSON.stringify(postedData,null,2))
+
+      let botSettings = await datastore.getBotSettings()
+      let reminderInterval = Math.max(30, parseInt(postedData.reminderInterval))
+      let enabled = !!postedData.enabled
+
+      // changed?
+      let intervalChanged = false
+      let botEnabledChanged = false
+      if (reminderInterval != botSettings.reminderInterval) {
+        intervalChanged = true
+      }
+      if (enabled != botSettings.enabled) {
+        botEnabledChanged = true
+      }
+
+      // update
+      botSettings.reminderInterval = reminderInterval
+      botSettings.enabled = enabled
+      await datastore.saveBotSettings(botSettings)
+
+      // send events
+      if (intervalChanged) {
+        eventEmitter.emit('twitchBotIntervalChanged', { interval: reminderInterval })
+      }
+
+      if (botEnabledChanged) {
+        if (enabled) {
+          eventEmitter.emit('twitchBotEnabled', {})
+        } else {
+          eventEmitter.emit('twitchBotDisabled', {})
+        }
+      }
+
+      res.json({
+        success: true,
+        botSettings: botSettings,
+      })
       return
     });
 
@@ -554,6 +660,7 @@ export default (app, http) => {
   
 
   // twitch bot
+  twitchbot.run()
   if (process.env.TWITCH_BOT_ENABLED == null || (process.env.TWITCH_BOT_ENABLED != '0' && process.env.TWITCH_BOT_ENABLED != 'false')) {
     logger.debug('Starting twitchbot')
     twitchbot.run()

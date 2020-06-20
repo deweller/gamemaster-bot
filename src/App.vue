@@ -21,10 +21,13 @@
 
             <template v-if="getUser().isAdmin">
             <li class="nav-item" :class="{active: this.$route.name == 'adminDashboard'}">
-              <router-link class="nav-link" :to="{name:'adminDashboard'}"><i class="fas fa-crown mr-1"></i>Admin</router-link>
+              <router-link class="nav-link" :to="{name:'adminDashboard'}"><i class="fas fa-crown mr-2"></i>Admin</router-link>
             </li>
             <li class="nav-item" :class="{active: this.$route.name == 'adminLotteries'}">
-              <router-link class="nav-link" :to="{name:'adminLotteries'}"><i class="fas fa-dice mr-1"></i>Manage Lotteries</router-link>
+              <router-link class="nav-link" :to="{name:'adminLotteries'}"><i class="fas fa-dice mr-2"></i>Manage Lotteries</router-link>
+            </li>
+            <li class="nav-item" :class="{active: this.$route.name == 'adminTwitchBotSettings'}">
+              <router-link class="nav-link" :to="{name:'adminTwitchBotSettings'}"><i class="fas fa-robot mr-2"></i>Manage Twitch Bot</router-link>
             </li>
             </template>
           </ul>

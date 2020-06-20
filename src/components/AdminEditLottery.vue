@@ -150,8 +150,15 @@
                     <template v-if="eligibleEntries.length > 0">
                     <div class="entries">
                         <template v-for="entry of eligibleEntries">
-                            <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
+                            <a href="#select" @click.prevent="toggleUsernameSelection(entry.username)" class="badge badge-pill badge-info mr-1" :class="{'selected': selectedUsernamesMap[entry.username]}" :key="entry.username">{{entry.username}}</a>
                         </template>
+                    </div>
+                    <div class="mt-3 text-center" v-if="anyUsernamesSelected">
+                        <ErrorComponent v-if="changeApiErrorMessage" :error="changeApiErrorMessage"></ErrorComponent>
+
+                        <a @click.prevent="addSelectionToWinners" href="#winners-choose" class="btn btn-primary ml-3" :class="{disabled: changing}"><i class="fas fa-trophy mr-2"></i>Choose winners</a>
+                        <a @click.prevent="addSelectionToPenaltyBox" href="#penalty-choose" class="btn btn-danger ml-3" :class="{disabled: changing}"><i class="fas fa-skull-crossbones mr-2"></i>Send users to the penalty box</a>
+                        <a @click.prevent="clearUsernamesSelection" href="#cancel-choose" class="btn btn-secondary ml-3" :class="{disabled: changing}">Cancel</a>
                     </div>
 
                     </template>
@@ -165,14 +172,36 @@
                         <template v-for="roundData of winningEntriesByRound">
                             <div :key="roundData.round">
                                 <hr class="my-4">
-                                <a href="#clear" @click.prevent="clearRoundWinners(roundData.round)" class="btn btn-danger float-right" :class="{disabled: clearing}"><i class="fas fa-trash mr-1"></i> Clear Round {{ roundData.round }} Winners</a>
-                                <h3 class="mt-4">Round {{ roundData.round }} Winners</h3>
+                                <a href="#clear" @click.prevent="clearRoundWinners(roundData.round)" class="btn btn-danger float-right" :class="{disabled: clearing}">
+                                        <template v-if="!isPenaltyBox(roundData.round)">
+                                            <i class="fas fa-trash mr-1"></i> Clear Round {{ roundData.round }} Winners
+                                        </template>
+                                        <template v-if="isPenaltyBox(roundData.round)">
+                                            <i class="fas fa-trash mr-1"></i> Empty the Penalty Box
+                                        </template>
+                                    </a>
+                                <h3 class="mt-4">
+                                    <template v-if="!isPenaltyBox(roundData.round)">
+                                        Round {{ roundData.round }} Winners
+                                    </template>
+                                    <template v-if="isPenaltyBox(roundData.round)">
+                                        <i class="fas fa-skull-crossbones mr-1"></i> The Penalty Box
+                                    </template>
+                                </h3>
                                 <div class="entries">
                                     <template v-for="entry of roundData.entries">
                                         <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
                                     </template>
                                 </div>
-                                <div class="mt-3 text-muted">These {{roundData.entries.length}} winners will be ineligible to win round {{ currentLotteryRound }}.</div>
+                                <div class="mt-3 text-muted">
+                                    <template v-if="!isPenaltyBox(roundData.round)">
+                                        These winners will be ineligible to win round {{ currentLotteryRound }}.
+                                    </template>
+                                    <template v-if="isPenaltyBox(roundData.round)">
+                                        These users are banned until the penalty box is emptied.
+                                    </template>
+
+                                </div>
                             </div>
                         </template>
                     </template>
@@ -305,6 +334,17 @@
         opacity: 0.35;
     }
 
+
+    .badge, a.badge {
+        font-weight: normal;
+    }
+    a.badge:focus {
+        box-shadow: none;
+    }
+    a.badge.selected {
+        box-shadow: 0 0 0 0.2rem darken(#17a2b8, 20%);
+        font-weight: bold;
+    }
 </style>
 
 <script>
@@ -313,6 +353,7 @@ import ErrorComponent from './ErrorComponent.vue'
 import * as api from '../lib/api'
 import jQuery from 'jquery'
 
+const PENALTY_BOX_ROUND = -1
 
 export default {
     name: 'AdminEditLottery',
@@ -339,15 +380,21 @@ export default {
             winnersApiErrorMessage: null,
             resetApiErrorMessage: null,
             clearApiErrorMessage: null,
+            changeApiErrorMessage: null,
 
             addToPreviousRound: false,
             chooseComplete: false,
-            choosing: false,
 
             confirmReset: false,
-            resetting: false,
 
+            selectedUsernamesMap: {},
+            penaltyBoxUsernames: [],
+            chosenUsernames: [],
+
+            choosing: false,
+            resetting: false,
             clearing: false,
+            changing: false,
 
             navTab: 'edit',
 
@@ -395,6 +442,48 @@ export default {
         changeNav(newNavTab) {
             this.navTab = newNavTab
         },
+
+        isPenaltyBox(roundNumber) {
+            return (roundNumber == PENALTY_BOX_ROUND)
+        },
+
+
+        toggleUsernameSelection(username) {
+            if (this.selectedUsernamesMap[username] == null) {
+                this.$set(this.selectedUsernamesMap, username, true)
+            } else {
+                this.$delete(this.selectedUsernamesMap, username)
+            }
+        },
+
+        clearUsernamesSelection() {
+            this.selectedUsernamesMap = {}
+        },
+
+        async addSelectionToWinners() {
+            let changes = []
+            for (let username of Object.keys(this.selectedUsernamesMap)) {
+                changes.push({
+                    chooseWinner: true,
+                    username: username,
+                })
+            }
+            await this.sendEntryChanges(changes)
+        },
+
+        async addSelectionToPenaltyBox() {
+            let changes = []
+            for (let username of Object.keys(this.selectedUsernamesMap)) {
+                changes.push({
+                    penaltyBox: true,
+                    username: username,
+                })
+            }
+            await this.sendEntryChanges(changes)
+        },
+
+        // ------------------------------------------------------------------------
+
         async loadLottery(lotteryId) {
             this.loading = true
             let responseData = await this.loadLotteryDataFromAPI(lotteryId)
@@ -518,6 +607,7 @@ export default {
                 this.chooseComplete = true
                 this.winnerCount = null
                 this.addToPreviousRound = false
+                this.selectedUsernamesMap = {}
             } else {
                 this.winnersApiErrorMessage = response.error
             }
@@ -571,6 +661,27 @@ export default {
                 this.confirmReset = false
             } else {
                 this.clearApiErrorMessage = response.error
+            }
+
+
+            // reload the lottery...
+        },
+
+        async sendEntryChanges(changes) {
+            if (this.changing) {
+                return
+            }
+
+            this.changeApiErrorMessage = ''
+            this.changing = true
+            let response = await api.modifyEntries(this.lottery._id, {changes: changes})
+            this.changing = false
+
+            if (response.success) {
+                // do nothing
+                this.selectedUsernamesMap = {}
+            } else {
+                this.changeApiErrorMessage = response.error
             }
 
 
@@ -659,6 +770,9 @@ export default {
             }
         },
 
+        anyUsernamesSelected() {
+            return Object.keys(this.selectedUsernamesMap).length > 0
+        },
 
     },
 }

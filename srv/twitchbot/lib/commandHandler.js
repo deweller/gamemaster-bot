@@ -8,8 +8,10 @@ let adminCommands = {}
 let config
 
 let reminderInterval = null
+let reminderIntervalSeconds = null
+let botIsEnabled = null
 
-exports.init = function(newClient, newConfig) {
+exports.init = async function(newClient, newConfig) {
     client = newClient
 
     config = {
@@ -18,11 +20,22 @@ exports.init = function(newClient, newConfig) {
         ...newConfig
     }
 
+    const botSettings = await datastore.getBotSettings()
+    reminderIntervalSeconds = botSettings.reminderInterval || (process.env.TWITCH_BOT_REMINDER_INTERVAL || 30)
+    botIsEnabled = botSettings.enabled != null ? botSettings.enabled : true
+
     listenForEvents()
     checkReminders()
 
     return {
-        handleMessage
+        onConnected,
+        handleMessage,
+    }
+}
+
+const onConnected = async function() {
+    if (botIsEnabled) {
+        await client.say(config.myChannelName, `Hi there.  Game Master has joined the chat.`)
     }
 }
 
@@ -47,6 +60,10 @@ const handleMessage = function(message, channel, tags) {
 
 function listenForEvents() {
     eventEmitter.on('lotteryCreated', (data) => {
+        if (!botIsEnabled) {
+            return
+        }
+
         const lotteryName = data.lottery.name
         client.say(config.myChannelName, `A new ${lotteryName} lottery has started. Please check Discord at ${process.env.DISCORD_INVITE_LINK} to enter.`)
 
@@ -56,8 +73,24 @@ function listenForEvents() {
         clearRemindersIfNoLotteries()
     })
     eventEmitter.on('winnersChosen', (data) => {
+        if (!botIsEnabled) {
+            return
+        }
         const lotteryName = data.lotteryName
         client.say(config.myChannelName, `Winners were chosen for ${lotteryName}. Please check Discord to see if you won and collect the information.`)
+    })
+
+    eventEmitter.on('twitchBotIntervalChanged', (data) => {
+        reminderIntervalSeconds = data.interval
+        logger.debug(`reminderInterval set to ${reminderIntervalSeconds}`)
+    })
+    eventEmitter.on('twitchBotEnabled', (data) => {
+        botIsEnabled = true
+        checkRemindersIfNotAlreadyRunning()
+    })
+    eventEmitter.on('twitchBotDisabled', (data) => {
+        botIsEnabled = false
+        clearReminderInterval()
     })
 }
 
@@ -91,11 +124,23 @@ function checkRemindersIfNotAlreadyRunning() {
     }
 }
 
+function resetInterval() {
+    clearReminderInterval()
+    checkReminders()
+}
+
+function clearReminderInterval()
+{
+    if (reminderInterval != null) {
+        clearInterval(reminderInterval)
+        reminderInterval = null
+    }
+}
+
 async function clearRemindersIfNoLotteries() {
     const hasLotteries = hasActiveLotteries(await datastore.getLotteries())
     if (!hasLotteries && reminderInterval != null) {
-        clearInterval(reminderInterval)
-        reminderInterval = null
+        clearReminderInterval()
     }
 }
 
@@ -119,26 +164,26 @@ function pullActiveLotteries(lotteries) {
 async function checkReminders() {
     const lotteries = await datastore.getLotteries()
     const hasLotteries = hasActiveLotteries(lotteries)
-    if (hasLotteries) {
+    if (hasLotteries && botIsEnabled) {
         if (reminderInterval == null) {
             // set up reminders for the future
-            // logger.debug('[checkReminders] starting interval')
-            reminderInterval = setInterval(checkReminders, (process.env.TWITCH_BOT_REMINDER_INTERVAL || 30) * 1000)
+            reminderInterval = setInterval(checkReminders, reminderIntervalSeconds * 1000)
         } else {
             // send a reminder now
             sendReminderMessage(lotteries)
         }
 
     } else {
-        // no lotteries
-        if (reminderInterval != null) {
-            clearInterval(reminderInterval)
-            reminderInterval = null
-        }
+        // no lotteries (or bot disabled)
+        clearReminderInterval()
     }
 }
 
 function sendReminderMessage(lotteries) {
+    if (!botIsEnabled) {
+        return
+    }
+
     const activeLotteries = pullActiveLotteries(lotteries)
 
     let offset = 0
