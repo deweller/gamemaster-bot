@@ -153,12 +153,11 @@
                             <a href="#select" @click.prevent="toggleUsernameSelection(entry.username)" class="badge badge-pill badge-info mr-1" :class="{'selected': selectedUsernamesMap[entry.username]}" :key="entry.username">{{entry.username}}</a>
                         </template>
                     </div>
-                    <div class="mt-3 text-center" v-if="anyUsernamesSelected">
+                    <div class="mt-3 text-center" v-if="selectedEligibleUsernames.length > 0">
                         <ErrorComponent v-if="changeApiErrorMessage" :error="changeApiErrorMessage"></ErrorComponent>
-
-                        <a @click.prevent="addSelectionToWinners" href="#winners-choose" class="btn btn-primary ml-3" :class="{disabled: changing}"><i class="fas fa-trophy mr-2"></i>Choose winners</a>
-                        <a @click.prevent="addSelectionToPenaltyBox" href="#penalty-choose" class="btn btn-danger ml-3" :class="{disabled: changing}"><i class="fas fa-skull-crossbones mr-2"></i>Send users to the penalty box</a>
-                        <a @click.prevent="clearUsernamesSelection" href="#cancel-choose" class="btn btn-secondary ml-3" :class="{disabled: changing}">Cancel</a>
+                        <a @click.prevent="addEligibleSelectedUsernamesToWinners" href="#winners-choose" class="btn btn-sm btn-primary ml-3" :class="{disabled: changing}"><i class="fas fa-trophy mr-2"></i>Choose selected as winners</a>
+                        <a @click.prevent="addEligibleSelectedUsernamesToPenaltyBox" href="#penalty-choose" class="btn btn-sm btn-danger ml-3" :class="{disabled: changing}"><i class="fas fa-skull-crossbones mr-2"></i>Send selected to the penalty box</a>
+                        <a @click.prevent="clearEligibleUsernamesSelection" href="#cancel-choose" class="btn btn-sm btn-secondary ml-3" :class="{disabled: changing}">Clear selection</a>
                     </div>
 
                     </template>
@@ -172,9 +171,9 @@
                         <template v-for="roundData of winningEntriesByRound">
                             <div :key="roundData.round">
                                 <hr class="my-4">
-                                <a href="#clear" @click.prevent="clearRoundWinners(roundData.round)" class="btn btn-danger float-right" :class="{disabled: clearing}">
+                                <a href="#clear" @click.prevent="clearRoundWinners(roundData.round)" class="btn btn-danger float-right" :class="{disabled: clearing || selectedUsernamesByRound[roundData.round].length > 0}">
                                         <template v-if="!isPenaltyBox(roundData.round)">
-                                            <i class="fas fa-trash mr-1"></i> Clear Round {{ roundData.round }} Winners
+                                            <i class="fas fa-trash mr-1"></i> Clear All Round {{ roundData.round }} Winners
                                         </template>
                                         <template v-if="isPenaltyBox(roundData.round)">
                                             <i class="fas fa-trash mr-1"></i> Empty the Penalty Box
@@ -190,7 +189,7 @@
                                 </h3>
                                 <div class="entries">
                                     <template v-for="entry of roundData.entries">
-                                        <span class="badge badge-pill badge-info mr-1" :key="entry.username">{{entry.username}}</span>
+                                        <a href="#select" @click.prevent="toggleUsernameSelection(entry.username)" class="badge badge-pill badge-info mr-1" :class="{'selected': selectedUsernamesMap[entry.username]}" :key="entry.username">{{entry.username}}</a>
                                     </template>
                                 </div>
                                 <div class="mt-3 text-muted">
@@ -202,7 +201,28 @@
                                     </template>
 
                                 </div>
+
+
+                                <div class="mt-3 text-center" v-if="selectedUsernamesByRound[roundData.round].length > 0">
+                                    <ErrorComponent v-if="changeApiErrorMessage" :error="changeApiErrorMessage"></ErrorComponent>
+                                    <a @click.prevent="removeSelectedUsernamesFromRound(roundData.round)" href="#clear-from-round" class="btn btn-sm btn-danger ml-3" :class="{disabled: changing}"><i class="fas fa-trash mr-2"></i>
+                                        <template v-if="!isPenaltyBox(roundData.round)">
+                                            Remove selected from round
+                                        </template>
+                                        <template v-if="isPenaltyBox(roundData.round)">
+                                            Remove selected from the penalty box
+                                        </template>
+                                    </a>
+                                    <template v-if="!isPenaltyBox(roundData.round)">
+                                        <a @click.prevent="addSelectedUsernamesToPenaltyBoxFromRound(roundData.round)" href="#penalty-choose" class="btn btn-sm btn-danger ml-3" :class="{disabled: changing}"><i class="fas fa-skull-crossbones mr-2"></i>Send selected to the penalty box</a>
+                                    </template>
+                                    <a @click.prevent="clearSelectedUsernamesSelectionFromRound(roundData.round)" href="#cancel-round" class="btn btn-sm btn-secondary ml-3" :class="{disabled: changing}">Clear selection</a>
+                                </div>
                             </div>
+
+
+
+
                         </template>
                     </template>
 
@@ -456,26 +476,56 @@ export default {
             }
         },
 
-        clearUsernamesSelection() {
-            this.selectedUsernamesMap = {}
+        clearEligibleUsernamesSelection() {
+            for (let username of this.selectedEligibleUsernames) {
+                this.$delete(this.selectedUsernamesMap, username)
+            }
         },
 
-        async addSelectionToWinners() {
+        clearSelectedUsernamesSelectionFromRound(round) {
+            for (let username of this.selectedUsernamesByRound[round]) {
+                this.$delete(this.selectedUsernamesMap, username)
+            }
+        },
+
+        async addEligibleSelectedUsernamesToWinners() {
             let changes = []
-            for (let username of Object.keys(this.selectedUsernamesMap)) {
+            for (let username of this.selectedEligibleUsernames) {
                 changes.push({
-                    chooseWinner: true,
+                    action: 'chooseWinner',
                     username: username,
                 })
             }
             await this.sendEntryChanges(changes)
         },
 
-        async addSelectionToPenaltyBox() {
+        async addEligibleSelectedUsernamesToPenaltyBox() {
             let changes = []
-            for (let username of Object.keys(this.selectedUsernamesMap)) {
+            for (let username of this.selectedEligibleUsernames) {
                 changes.push({
-                    penaltyBox: true,
+                    action: 'penaltyBox',
+                    username: username,
+                })
+            }
+            await this.sendEntryChanges(changes)
+        },
+
+        async removeSelectedUsernamesFromRound(round) {
+            let changes = []
+            for (let username of this.selectedUsernamesByRound[round]) {
+                changes.push({
+                    action: 'clearChosenRound',
+                    username: username,
+                })
+            }
+            await this.sendEntryChanges(changes)
+        },
+
+        async addSelectedUsernamesToPenaltyBoxFromRound(round) {
+            let changes = []
+            for (let username of this.selectedUsernamesByRound[round]) {
+                changes.push({
+                    action: 'penaltyBox',
                     username: username,
                 })
             }
@@ -770,9 +820,32 @@ export default {
             }
         },
 
-        anyUsernamesSelected() {
-            return Object.keys(this.selectedUsernamesMap).length > 0
+        selectedEligibleUsernames() {
+            let selectedEligibleUsernames = []
+            for (let eligibleEntry of this.eligibleEntries) {
+                if (this.selectedUsernamesMap[eligibleEntry.username] != null) {
+                    selectedEligibleUsernames.push(eligibleEntry.username)
+                }
+            }
+
+            return selectedEligibleUsernames
         },
+
+        selectedUsernamesByRound() {
+            let selectedUsernamesByRound = {}
+            for (let roundData of this.winningEntriesByRound) {
+                const round = roundData.round
+                selectedUsernamesByRound[round] = []
+                for (let entry of roundData.entries) {
+                    if (this.selectedUsernamesMap[entry.username] != null) {
+                        selectedUsernamesByRound[round].push(entry.username)
+                    }
+                }
+            }
+
+            return selectedUsernamesByRound
+        },
+
 
     },
 }

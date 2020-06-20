@@ -483,13 +483,19 @@ export default (app, http) => {
       }
 
       for (let change of postedData.changes) {
-        if (change.penaltyBox) {
+        if (change.action == 'penaltyBox') {
           await datastore.updateLotteryEntryByUsername(lottery._id, change.username, {
             chosenRound: PENALTY_BOX_ROUND,
           })
         }
  
-        if (change.chooseWinner) {
+        if (change.action == 'clearChosenRound') {
+          await datastore.updateLotteryEntryByUsername(lottery._id, change.username, {
+            chosenRound: null,
+          })
+        }
+ 
+        if (change.action == 'chooseWinner') {
           // find the entry
           const entry = await datastore.findLotteryEntry(lottery._id, change.username)
           if (entry) {
